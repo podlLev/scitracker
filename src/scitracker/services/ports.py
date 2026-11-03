@@ -1,8 +1,26 @@
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from scitracker.domain.publication import Publication
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
+
+
+@dataclass(frozen=True, slots=True)
+class SourceResult:
+    """Publications parsed from one source and the number of rejected records."""
+
+    publications: list[Publication] = field(default_factory=list)
+    rejected: int = 0
+
+
+class PublicationSource(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    async def search(self, query: str, *, limit: int = 50) -> SourceResult:
+        """Return up to `limit` publications; raise SourceError if the source is unavailable."""
+        ...
 
 
 class PublicationRepository(Protocol):
