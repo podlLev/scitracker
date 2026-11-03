@@ -14,3 +14,7 @@ class InvalidStatusTransitionError(DomainError):
         self.current = current
         self.target = target
         self.reason = reason
+
+
+class DuplicateRecordError(DomainError):
+    """A record violating a uniqueness rule already exists."""
