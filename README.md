@@ -12,7 +12,7 @@
 
 - [x] Каркас проєкту, інструменти якості, CI
 - [x] Доменна модель і правила переходу статусів
-- [ ] Шар зберігання (PostgreSQL, міграції, seed-дані)
+- [x] Шар зберігання (PostgreSQL, міграції, seed-дані)
 - [ ] Клієнти arXiv і Crossref
 - [ ] Нормалізація та дедуплікація
 - [ ] REST API
@@ -31,20 +31,20 @@
 
 ## Стек
 
-| Компонент              | Інструмент                                 |
-|------------------------|--------------------------------------------|
-| Мова                   | Python 3.12+                               |
-| Керування залежностями | uv                                         |
-| База даних             | PostgreSQL (обґрунтування буде в ADR-002)  |
-| ORM і міграції         | SQLAlchemy 2.0, Alembic                    |
-| HTTP-клієнт            | httpx                                      |
-| API                    | FastAPI, Pydantic                          |
-| Якість коду            | ruff, mypy (strict), pytest, import-linter |
-| CI                     | GitHub Actions                             |
-| Контейнеризація        | Docker, Docker Compose                     |
+| Компонент              | Інструмент                                             |
+|------------------------|--------------------------------------------------------|
+| Мова                   | Python 3.12+                                           |
+| Керування залежностями | uv                                                     |
+| База даних             | PostgreSQL (див. [ADR-002](docs/adr/0002-database.md)) |
+| ORM і міграції         | SQLAlchemy 2.0, Alembic                                |
+| HTTP-клієнт            | httpx                                                  |
+| API                    | FastAPI, Pydantic                                      |
+| Якість коду            | ruff, mypy (strict), pytest, import-linter             |
+| CI                     | GitHub Actions                                         |
+| Контейнеризація        | Docker, Docker Compose                                 |
 
 Обґрунтування вибору інструментів і розглянуті альтернативи: [ADR-001](docs/adr/0001-technology-stack.md).
-Не всі компоненти вже підключено: вони з'являються в наступних PR.
+Не всі компоненти вже підключено: клієнти, API та автентифікація з'являться пізніше.
 
 ## Архітектура
 
@@ -53,9 +53,9 @@
 ```
 src/scitracker/
 ├── domain/     # моделі та правила предметної області
-├── services/   # сценарії використання, протоколи
+├── services/   # сценарії використання, протоколи (ports.py)
 ├── sources/    # адаптери arXiv та Crossref
-├── storage/    # моделі БД, репозиторії, міграції
+├── storage/    # моделі БД, репозиторії, міграції, seed
 └── api/        # маршрути FastAPI
 ```
 
@@ -78,21 +78,32 @@ uv sync
 uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
 
-Перевірки (мають проходити перед кожним PR):
+### База даних
+
+Потрібен запущений Docker.
+
+```powershell
+copy .env.example .env
+docker compose up -d db
+uv run --env-file .env alembic upgrade head
+uv run --env-file .env python -m scitracker.storage.seed
+```
+
+База доступна на `127.0.0.1:5433` (порт 5433 обрано, щоб не конфліктувати з локальним PostgreSQL на 5432). Тестова база `scitracker_test` створюється автоматично під час першого запуску контейнера.
+
+### Перевірки
+
+Мають проходити перед кожним PR:
 
 ```powershell
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv run lint-imports
-uv run pytest
+uv run --env-file .env pytest
 ```
 
-Ті самі перевірки виконує CI на кожен pull request.
-
-### Конфігурація
-
-Скопіюйте `.env.example` у `.env` і заповніть значення. Файл `.env` не потрапляє до репозиторію.
+Ті самі перевірки виконує CI на кожен pull request (з сервісним контейнером PostgreSQL). Без запущеної бази тести storage локально пропускаються.
 
 ## Процес роботи
 

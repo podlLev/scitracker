@@ -6,7 +6,11 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "alembic>=1.20.1",
+    "psycopg[binary]>=3.3.7",
+    "sqlalchemy>=2.1.6",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -20,6 +24,10 @@ packages = ["src/scitracker"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+extend-exclude = ["src/scitracker/storage/migrations"]
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["sqlalchemy.orm.DeclarativeBase"]
 
 [tool.ruff.lint]
 select = [
@@ -35,6 +43,7 @@ ignore = ["PLR2004"]
 [tool.mypy]
 strict = true
 files = ["src", "tests"]
+exclude = ['^src/scitracker/storage/migrations/']
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 
@@ -54,6 +63,7 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 branch = true
 source = ["scitracker"]
+omit = ["src/scitracker/storage/migrations/*"]
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
@@ -61,6 +71,7 @@ exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
 # ---------- import-linter: межі шарів ----------
 [tool.importlinter]
 root_package = "scitracker"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Domain is the innermost layer"
@@ -71,16 +82,25 @@ forbidden_modules = [
     "scitracker.sources",
     "scitracker.storage",
     "scitracker.api",
+    "sqlalchemy",
+    "psycopg",
+    "alembic",
+    "httpx",
+    "fastapi",
+    "pydantic",
 ]
 
 [[tool.importlinter.contracts]]
-name = "Services depend only on domain (adapters implement service protocols)"
+name = "Services depend only on domain"
 type = "forbidden"
 source_modules = ["scitracker.services"]
 forbidden_modules = [
     "scitracker.sources",
     "scitracker.storage",
     "scitracker.api",
+    "sqlalchemy",
+    "psycopg",
+    "alembic",
 ]
 
 [[tool.importlinter.contracts]]
