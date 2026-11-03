@@ -13,7 +13,7 @@
 - [x] Каркас проєкту, інструменти якості, CI
 - [x] Доменна модель і правила переходу статусів
 - [x] Шар зберігання (PostgreSQL, міграції, seed-дані)
-- [ ] Клієнти arXiv і Crossref
+- [x] Клієнти arXiv і Crossref
 - [ ] Нормалізація та дедуплікація
 - [ ] REST API
 - [ ] Автентифікація, ролі, читацький список, нотатки
@@ -37,7 +37,7 @@
 | Керування залежностями | uv                                                     |
 | База даних             | PostgreSQL (див. [ADR-002](docs/adr/0002-database.md)) |
 | ORM і міграції         | SQLAlchemy 2.0, Alembic                                |
-| HTTP-клієнт            | httpx                                                  |
+| HTTP-клієнт            | httpx, defusedxml (безпечний розбір XML)               |
 | API                    | FastAPI, Pydantic                                      |
 | Якість коду            | ruff, mypy (strict), pytest, import-linter             |
 | CI                     | GitHub Actions                                         |
@@ -53,8 +53,8 @@
 ```
 src/scitracker/
 ├── domain/     # моделі та правила предметної області
-├── services/   # сценарії використання, протоколи (ports.py)
-├── sources/    # адаптери arXiv та Crossref
+├── services/   # сценарії використання, порти, помилки
+├── sources/    # адаптери arXiv та Crossref, HTTP-шар із retry
 ├── storage/    # моделі БД, репозиторії, міграції, seed
 └── api/        # маршрути FastAPI
 ```
@@ -104,6 +104,17 @@ uv run --env-file .env pytest
 ```
 
 Ті самі перевірки виконує CI на кожен pull request (з сервісним контейнером PostgreSQL). Без запущеної бази тести storage локально пропускаються.
+
+### Перевірка реальних API
+
+Тести проти справжніх arXiv і Crossref за замовчуванням вимкнені (маркер `live`). Запуск вручну:
+
+```powershell
+uv run pytest -m live -s --no-cov
+```
+
+Також є ручний workflow GitHub Actions «Live API checks» (вкладка Actions).
+`CROSSREF_MAILTO` у `.env` потрібна для «polite pool» Crossref (стабільніші ліміти запитів).
 
 ## Процес роботи
 
