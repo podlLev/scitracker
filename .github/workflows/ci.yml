@@ -15,7 +15,27 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+
+    env:
+      DATABASE_URL: postgresql+psycopg://scitracker:scitracker@127.0.0.1:5432/scitracker_test
+      TEST_DATABASE_URL: postgresql+psycopg://scitracker:scitracker@127.0.0.1:5432/scitracker_test
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: scitracker
+          POSTGRES_PASSWORD: scitracker
+          POSTGRES_DB: scitracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U scitracker -d scitracker_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v7
 
@@ -38,11 +58,19 @@ jobs:
       - name: Architecture boundaries
         run: uv run lint-imports
 
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Check migrations match models
+        run: uv run alembic check
+
       - name: Tests
         run: uv run pytest --cov-report=xml
 
       - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage-xml
           path: coverage.xml
+          if-no-files-found: ignore
