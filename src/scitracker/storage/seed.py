@@ -71,7 +71,7 @@ def seed(session: Session, *, publications: int = 250, rng_seed: int = 42) -> in
     return publications
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     logging.basicConfig(level=logging.INFO)
     engine = create_db_engine(os.environ["DATABASE_URL"])
     factory = create_session_factory(engine)
@@ -80,5 +80,5 @@ def main() -> None:
     logger.info("seeded %d publications", created)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
