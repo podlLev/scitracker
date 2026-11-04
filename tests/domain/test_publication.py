@@ -34,3 +34,13 @@ def test_blank_title_is_rejected() -> None:
 def test_blank_author_name_is_rejected() -> None:
     with pytest.raises(InvalidValueError):
         Author("  ")
+
+
+def test_arxiv_id_is_derived_from_arxiv_doi() -> None:
+    pub = Publication(title="T", authors=[], doi="10.48550/arXiv.1706.03762")
+    assert pub.arxiv_id == "1706.03762"
+
+
+def test_explicit_arxiv_id_is_not_overridden_by_doi() -> None:
+    pub = Publication(title="T", authors=[], doi="10.48550/arXiv.1706.03762", arxiv_id="2101.00001")
+    assert pub.arxiv_id == "2101.00001"

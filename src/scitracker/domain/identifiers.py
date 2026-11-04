@@ -15,6 +15,7 @@ _ARXIV_PREFIXES = ("https://arxiv.org/abs/", "http://arxiv.org/abs/", "arxiv:")
 _ARXIV_VERSION_RE = re.compile(r"v\d+$")
 _ARXIV_NEW_RE = re.compile(r"^\d{4}\.\d{4,5}$")
 _ARXIV_OLD_RE = re.compile(r"^[a-z-]+(\.[a-z]{2})?/\d{7}$")
+_ARXIV_DOI_PREFIX = "10.48550/arxiv."
 
 
 def _strip_prefix(value: str, prefixes: tuple[str, ...]) -> str:
@@ -39,3 +40,14 @@ def normalize_arxiv_id(raw: str) -> str:
     if not (_ARXIV_NEW_RE.match(value) or _ARXIV_OLD_RE.match(value)):
         raise InvalidValueError(f"invalid arXiv ID: {raw!r}")
     return value
+
+
+def arxiv_id_from_doi(doi: str) -> str | None:
+    """Return the arXiv ID embedded in an arXiv-issued DOI (10.48550/arXiv.<id>), else None."""
+    value = doi.lower()
+    if not value.startswith(_ARXIV_DOI_PREFIX):
+        return None
+    try:
+        return normalize_arxiv_id(value.removeprefix(_ARXIV_DOI_PREFIX))
+    except InvalidValueError:
+        return None
