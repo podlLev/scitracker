@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from scitracker.domain.errors import DuplicateRecordError
+from scitracker.domain.errors import DuplicateRecordError, InvalidValueError, RecordNotFoundError
 from scitracker.domain.publication import Author, Publication
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
@@ -57,13 +57,13 @@ def test_duplicate_doi_raises_and_session_stays_usable(session: Session) -> None
     assert repo.count() == 1
 
 
-def test_find_by_identifiers(session: Session) -> None:
+def test_find_all_by_identifiers(session: Session) -> None:
     repo = SqlPublicationRepository(session)
     repo.add(make_pub(doi="10.1000/a", arxiv_id="2101.12345"))
-    assert repo.find_by_identifiers(doi="10.1000/a", arxiv_id=None) is not None
-    assert repo.find_by_identifiers(doi=None, arxiv_id="2101.12345") is not None
-    assert repo.find_by_identifiers(doi="10.1000/zzz", arxiv_id=None) is None
-    assert repo.find_by_identifiers(doi=None, arxiv_id=None) is None
+    assert len(repo.find_all_by_identifiers(doi="10.1000/a", arxiv_id=None)) == 1
+    assert len(repo.find_all_by_identifiers(doi=None, arxiv_id="2101.12345")) == 1
+    assert repo.find_all_by_identifiers(doi="10.1000/zzz", arxiv_id=None) == []
+    assert repo.find_all_by_identifiers(doi=None, arxiv_id=None) == []
 
 
 def test_user_email_is_unique(session: Session) -> None:
@@ -111,3 +111,56 @@ def test_duplicate_author_in_one_publication_is_stored_once(session: Session) ->
     pub = Publication(title="T", authors=[Author("Ann Lee"), Author("Ann Lee")], doi="10.1000/dup")
     saved = SqlPublicationRepository(session).add(pub)
     assert [a.name for a in saved.authors] == ["Ann Lee"]
+
+
+def test_update_fills_gaps_and_replaces_authors(session: Session) -> None:
+    repo = SqlPublicationRepository(session)
+    saved = repo.add(Publication(title="T", authors=[Author("Ann Lee")], doi="10.1000/a"))
+    saved.arxiv_id = "2101.00001"
+    saved.authors = [Author("Ann Lee"), Author("Bob Ray")]
+    repo.update(saved)
+    assert saved.id is not None
+    loaded = repo.get(saved.id)
+    assert loaded is not None
+    assert loaded.arxiv_id == "2101.00001"
+    assert [a.name for a in loaded.authors] == ["Ann Lee", "Bob Ray"]
+
+
+def test_update_of_unknown_publication_raises(session: Session) -> None:
+    with pytest.raises(RecordNotFoundError):
+        SqlPublicationRepository(session).update(
+            make_pub().__class__(title="T", authors=[], doi="10.1000/a", id=999_999)
+        )
+
+
+def test_update_without_id_is_rejected(session: Session) -> None:
+    with pytest.raises(InvalidValueError):
+        SqlPublicationRepository(session).update(make_pub())
+
+
+def test_update_with_clashing_doi_raises_and_session_stays_usable(session: Session) -> None:
+    repo = SqlPublicationRepository(session)
+    repo.add(make_pub(doi="10.1000/a"))
+    other = repo.add(make_pub(doi="10.1000/b"))
+    other.doi = "10.1000/a"
+    with pytest.raises(DuplicateRecordError):
+        repo.update(other)
+    assert repo.count() == 2
+
+
+def test_link_topic_is_idempotent(session: Session) -> None:
+    pub = SqlPublicationRepository(session).add(make_pub())
+    topic = SqlTopicRepository(session).add(Topic(name="A", query="a"))
+    assert pub.id is not None
+    assert topic.id is not None
+    repo = SqlPublicationRepository(session)
+    assert repo.link_topic(pub.id, topic.id) is True
+    assert repo.link_topic(pub.id, topic.id) is False
+
+
+def test_failed_insert_leaves_no_orphan_authors(session: Session) -> None:
+    repo = SqlPublicationRepository(session)
+    repo.add(make_pub(doi="10.1000/a"))
+    with pytest.raises(DuplicateRecordError):
+        repo.add(Publication(title="T", authors=[Author("Zed Nobody")], doi="10.1000/a"))
+    assert session.scalars(select(AuthorRow).where(AuthorRow.name == "Zed Nobody")).first() is None
