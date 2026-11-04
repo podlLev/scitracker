@@ -14,7 +14,7 @@
 - [x] Доменна модель і правила переходу статусів
 - [x] Шар зберігання (PostgreSQL, міграції, seed-дані)
 - [x] Клієнти arXiv і Crossref
-- [ ] Нормалізація та дедуплікація
+- [x] Нормалізація та дедуплікація
 - [ ] REST API
 - [ ] Автентифікація, ролі, читацький список, нотатки
 - [ ] CLI, експорт BibTeX, статистика
@@ -53,7 +53,7 @@
 ```
 src/scitracker/
 ├── domain/     # моделі та правила предметної області
-├── services/   # сценарії використання, порти, помилки
+├── services/   # сценарії використання, порти, помилки, збір та дедуплікація
 ├── sources/    # адаптери arXiv та Crossref, HTTP-шар із retry
 ├── storage/    # моделі БД, репозиторії, міграції, seed
 └── api/        # маршрути FastAPI
@@ -115,6 +115,14 @@ uv run pytest -m live -s --no-cov
 
 Також є ручний workflow GitHub Actions «Live API checks» (вкладка Actions).
 `CROSSREF_MAILTO` у `.env` потрібна для «polite pool» Crossref (стабільніші ліміти запитів).
+
+### Збір публікацій
+
+```powershell
+uv run --env-file .env python -m scitracker.collect
+```
+
+Для кожної теми запитує arXiv і Crossref паралельно, об'єднує дублікати за DOI та arXiv ID й виводить підсумок (створено, об'єднано, відхилено, збої джерел). Потрібна `CROSSREF_MAILTO` у `.env`.
 
 ## Процес роботи
 
