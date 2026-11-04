@@ -18,3 +18,7 @@ class InvalidStatusTransitionError(DomainError):
 
 class DuplicateRecordError(DomainError):
     """A record violating a uniqueness rule already exists."""
+
+
+class RecordNotFoundError(DomainError):
+    """A referenced record does not exist."""

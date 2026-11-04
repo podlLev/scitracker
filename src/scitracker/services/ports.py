@@ -28,11 +28,24 @@ class PublicationRepository(Protocol):
         """Persist the publication; raise DuplicateRecordError on a DOI/arXiv ID clash."""
         ...
 
+    def update(self, publication: Publication) -> Publication:
+        """Overwrite the stored publication with the same id.
+
+        Raise RecordNotFoundError if it does not exist, DuplicateRecordError on an identifier clash.
+        """
+        ...
+
     def get(self, publication_id: int) -> Publication | None: ...
 
-    def find_by_identifiers(
+    def find_all_by_identifiers(
         self, *, doi: str | None, arxiv_id: str | None
-    ) -> Publication | None: ...
+    ) -> list[Publication]:
+        """Return every stored publication matching the DOI or the arXiv ID."""
+        ...
+
+    def link_topic(self, publication_id: int, topic_id: int) -> bool:
+        """Attach the publication to the topic; False if it was already attached."""
+        ...
 
     def count(self) -> int: ...
 

@@ -101,6 +101,21 @@ class TopicRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PublicationTopicRow(Base):
+    """Many-to-many: which publications were found for which topic."""
+
+    __tablename__ = "publication_topics"
+    __table_args__ = (Index("ix_publication_topics_topic_added", "topic_id", "added_at"),)
+
+    publication_id: Mapped[int] = mapped_column(
+        ForeignKey("publications.id", ondelete="CASCADE"), primary_key=True
+    )
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("topics.id", ondelete="CASCADE"), primary_key=True
+    )
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ReadingItemRow(Base):
     __tablename__ = "reading_items"
     __table_args__ = (

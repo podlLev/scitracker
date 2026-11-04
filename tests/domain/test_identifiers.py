@@ -1,7 +1,7 @@
 import pytest
 
 from scitracker.domain.errors import InvalidValueError
-from scitracker.domain.identifiers import normalize_arxiv_id, normalize_doi
+from scitracker.domain.identifiers import arxiv_id_from_doi, normalize_arxiv_id, normalize_doi
 
 
 @pytest.mark.parametrize(
@@ -40,3 +40,17 @@ def test_normalize_arxiv_id(raw: str, expected: str) -> None:
 def test_normalize_arxiv_id_rejects_invalid(raw: str) -> None:
     with pytest.raises(InvalidValueError):
         normalize_arxiv_id(raw)
+
+
+@pytest.mark.parametrize(
+    ("doi", "expected"),
+    [
+        ("10.48550/arxiv.1706.03762", "1706.03762"),
+        ("10.48550/arxiv.1706.03762v2", "1706.03762"),
+        ("10.48550/arxiv.hep-th/9901001", "hep-th/9901001"),
+        ("10.1000/abc", None),
+        ("10.48550/arxiv.garbage", None),
+    ],
+)
+def test_arxiv_id_from_doi(doi: str, expected: str | None) -> None:
+    assert arxiv_id_from_doi(doi) == expected
