@@ -64,10 +64,15 @@ def seed(session: Session, *, publications: int = 250, rng_seed: int = 42) -> in
     if not topics.list_all():
         for name, query in TOPICS:
             topics.add(Topic(name=name, query=query))
-    rng = random.Random(rng_seed)  # noqa: S311 - deterministic seed data, not security
+    topic_ids = [topic.id for topic in topics.list_all() if topic.id is not None]
+    rng = random.Random(rng_seed)
     authors = [Author(f"{first} {last}") for first in FIRST_NAMES for last in LAST_NAMES]
     for index in range(publications):
-        repo.add(_make_publication(index, rng, authors))
+        saved = repo.add(_make_publication(index, rng, authors))
+        if saved.id is None:  # pragma: no cover - defensive, the repository always sets the id
+            raise RuntimeError("repository returned a publication without an id")
+        for topic_id in rng.sample(topic_ids, k=min(rng.randint(1, 2), len(topic_ids))):
+            repo.link_topic(saved.id, topic_id)
     return publications
 
 
