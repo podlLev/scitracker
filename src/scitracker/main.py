@@ -7,9 +7,11 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from scitracker.api.app import create_app
-from scitracker.api.deps import ReadRepositories
+from scitracker.security.passwords import Argon2PasswordHasher
+from scitracker.security.tokens import JwtTokenService
+from scitracker.services.ports import UnitOfWork
 from scitracker.storage.database import create_db_engine, create_session_factory
-from scitracker.storage.repositories import SqlPublicationRepository, SqlTopicRepository
+from scitracker.storage.unit_of_work import SqlUnitOfWork
 
 
 def build_app() -> FastAPI:
@@ -19,12 +21,17 @@ def build_app() -> FastAPI:
     session_factory = create_session_factory(create_db_engine(os.environ["DATABASE_URL"]))
 
     @contextmanager
-    def read_scope() -> Iterator[ReadRepositories]:
+    def scope() -> Iterator[UnitOfWork]:
         with session_factory() as session:
-            yield ReadRepositories(SqlPublicationRepository(session), SqlTopicRepository(session))
+            yield SqlUnitOfWork(session)
 
     def ping() -> None:
         with session_factory() as session:
             session.execute(text("SELECT 1"))
 
-    return create_app(read_scope=read_scope, ping=ping)
+    return create_app(
+        scope=scope,
+        ping=ping,
+        hasher=Argon2PasswordHasher(),
+        tokens=JwtTokenService(os.environ["JWT_SECRET"]),
+    )
