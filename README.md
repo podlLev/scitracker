@@ -16,7 +16,7 @@
 - [x] Клієнти arXiv і Crossref
 - [x] Нормалізація та дедуплікація
 - [x] REST API
-- [ ] Автентифікація, ролі, читацький список, нотатки
+- [x] Автентифікація, ролі, читацький список, нотатки
 - [ ] CLI, експорт BibTeX, статистика
 - [ ] Docker і розгортання
 
@@ -56,7 +56,8 @@ src/scitracker/
 ├── services/   # сценарії використання, порти, помилки, збір та дедуплікація
 ├── sources/    # адаптери arXiv та Crossref, HTTP-шар із retry
 ├── storage/    # моделі БД, репозиторії, міграції, seed
-└── api/        # маршрути FastAPI, схеми, помилки
+├── api/        # маршрути FastAPI, схеми, помилки
+└── security/   # паролі (argon2id), JWT
 ```
 
 Межі шарів перевіряються автоматично командою `lint-imports` (налаштування в `pyproject.toml`).
@@ -90,6 +91,25 @@ uv run --env-file .env python -m scitracker.storage.seed
 ```
 
 База доступна на `127.0.0.1:5433` (порт 5433 обрано, щоб не конфліктувати з локальним PostgreSQL на 5432). Тестова база `scitracker_test` створюється автоматично під час першого запуску контейнера.
+
+### Конфігурація
+
+Змінні середовища задаються в `.env` (файл не потрапляє до репозиторію, шаблон: `.env.example`).
+
+| Змінна              | Призначення                                                   |
+|---------------------|---------------------------------------------------------------|
+| `DATABASE_URL`      | підключення до PostgreSQL                                     |
+| `TEST_DATABASE_URL` | тестова база (`scitracker_test`)                              |
+| `CROSSREF_MAILTO`   | пошта для «polite pool» Crossref (стабільніші ліміти запитів) |
+| `JWT_SECRET`        | секрет підпису токенів, мінімум 32 символи                    |
+
+Згенерувати секрет:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Без `JWT_SECRET` застосунок не стартує.
 
 ### Перевірки
 
@@ -133,6 +153,14 @@ uv run --env-file .env uvicorn scitracker.main:build_app --factory --reload
 Документація Swagger: http://127.0.0.1:8000/docs, перевірка працездатності: `/healthz`.
 Пошук: `GET /api/v1/publications?q=&author=&topic=&from=&cursor=&limit=`.
 Помилки повертаються у форматі `application/problem+json` (RFC 9457).
+
+### Адміністратор і автентифікація
+
+```powershell
+uv run --env-file .env python -m scitracker.create_admin
+```
+
+Реєстрація: `POST /api/v1/auth/register`, вхід: `POST /api/v1/auth/login` повертає токен (30 хв). У Swagger натисніть **Authorize** і вставте токен. Гість лише шукає публікації; користувач керує приватними темами (до 20); адміністратор створює й видаляє публічні.
 
 ## Процес роботи
 

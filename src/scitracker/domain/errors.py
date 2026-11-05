@@ -22,3 +22,15 @@ class DuplicateRecordError(DomainError):
 
 class RecordNotFoundError(DomainError):
     """A referenced record does not exist."""
+
+
+class AuthenticationError(DomainError):
+    """Credentials or token are missing or invalid."""
+
+
+class PermissionDeniedError(DomainError):
+    """The user is known but not allowed to do this."""
+
+
+class QuotaExceededError(DomainError):
+    """A per-user limit has been reached."""

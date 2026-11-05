@@ -8,10 +8,12 @@ license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.1",
+    "argon2-cffi>=25.1.0",
     "defusedxml>=0.7.1",
     "fastapi>=0.162.0",
     "httpx>=0.28.1",
     "psycopg[binary]>=3.3.7",
+    "pyjwt>=2.15.1",
     "sqlalchemy>=2.1.6",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -41,7 +43,7 @@ select = [
 ignore = ["PLR2004"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S106", "PLR0913", "PLR2004"]
+"tests/**" = ["S101", "S105", "S106", "PLR0913", "PLR2004"]
 "src/scitracker/storage/seed.py" = ["S311"]
 "src/scitracker/api/**" = ["TC001", "TC002", "TC003"]
 
@@ -72,11 +74,14 @@ addopts = [
 filterwarnings = ["error"]
 
 [tool.coverage.run]
+branch = true
+source = ["scitracker"]
 omit = [
     "src/scitracker/storage/migrations/*",
     "src/scitracker/services/ports.py",
     "src/scitracker/collect.py",
     "src/scitracker/main.py",
+    "src/scitracker/create_admin.py",
 ]
 
 [tool.coverage.report]
@@ -92,9 +97,10 @@ name = "Domain is the innermost layer"
 type = "forbidden"
 source_modules = ["scitracker.domain"]
 forbidden_modules = [
-    "scitracker.services", "scitracker.sources", "scitracker.storage", "scitracker.api",
+    "scitracker.services", "scitracker.sources", "scitracker.storage",
+    "scitracker.api", "scitracker.security",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
-    "fastapi", "starlette", "pydantic", "uvicorn",
+    "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
 ]
 
 [[tool.importlinter.contracts]]
@@ -102,9 +108,9 @@ name = "Services depend only on domain"
 type = "forbidden"
 source_modules = ["scitracker.services"]
 forbidden_modules = [
-    "scitracker.sources", "scitracker.storage", "scitracker.api",
+    "scitracker.sources", "scitracker.storage", "scitracker.api", "scitracker.security",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
-    "fastapi", "starlette", "pydantic", "uvicorn",
+    "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
 ]
 
 [[tool.importlinter.contracts]]
@@ -117,9 +123,7 @@ forbidden_modules = ["sqlalchemy", "psycopg", "alembic"]
 name = "Adapters and interfaces do not import each other"
 type = "independence"
 modules = [
-    "scitracker.sources",
-    "scitracker.storage",
-    "scitracker.api",
+    "scitracker.sources", "scitracker.storage", "scitracker.api", "scitracker.security",
 ]
 
 [dependency-groups]

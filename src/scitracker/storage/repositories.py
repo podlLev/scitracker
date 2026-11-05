@@ -185,6 +185,10 @@ class SqlUserRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def get(self, user_id: int) -> User | None:
+        row: UserRow | None = self._session.get(UserRow, user_id)
+        return self._to_domain(row) if row is not None else None
+
     def add(self, user: User) -> User:
         row = UserRow(email=user.email, password_hash=user.password_hash, role=user.role.value)
         _add_or_duplicate(self._session, row, f"user {user.email} already exists")
@@ -204,6 +208,26 @@ class SqlUserRepository:
 class SqlTopicRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def get(self, topic_id: int) -> Topic | None:
+        row: TopicRow | None = self._session.get(TopicRow, topic_id)
+        return self._to_domain(row) if row is not None else None
+
+    def list_public(self) -> list[Topic]:
+        stmt = select(TopicRow).where(TopicRow.owner_id.is_(None)).order_by(TopicRow.id)
+        return [self._to_domain(row) for row in self._session.scalars(stmt)]
+
+    def list_owned(self, owner_id: int) -> list[Topic]:
+        stmt = select(TopicRow).where(TopicRow.owner_id == owner_id).order_by(TopicRow.id)
+        return [self._to_domain(row) for row in self._session.scalars(stmt)]
+
+    def delete(self, topic_id: int) -> bool:
+        row: TopicRow | None = self._session.get(TopicRow, topic_id)
+        if row is None:
+            return False
+        self._session.delete(row)
+        self._session.flush()  # links in publication_topics go away via ON DELETE CASCADE
+        return True
 
     def add(self, topic: Topic) -> Topic:
         row = TopicRow(name=topic.name, query=topic.query, owner_id=topic.owner_id)

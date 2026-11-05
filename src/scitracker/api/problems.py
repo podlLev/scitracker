@@ -9,10 +9,13 @@ from pydantic import BaseModel, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from scitracker.domain.errors import (
+    AuthenticationError,
     DomainError,
     DuplicateRecordError,
     InvalidStatusTransitionError,
     InvalidValueError,
+    PermissionDeniedError,
+    QuotaExceededError,
     RecordNotFoundError,
 )
 
@@ -71,6 +74,9 @@ _DOMAIN_PROBLEMS: tuple[tuple[type[DomainError], int, str, str], ...] = (
     ),
     (DuplicateRecordError, 409, "duplicate-record", "Record already exists"),
     (RecordNotFoundError, 404, "not-found", "Resource not found"),
+    (AuthenticationError, 401, "authentication-failed", "Authentication required"),
+    (PermissionDeniedError, 403, "forbidden", "Forbidden"),
+    (QuotaExceededError, 409, "quota-exceeded", "Quota exceeded"),
     (InvalidValueError, 422, "invalid-value", "Invalid value"),
     (DomainError, 400, "domain-error", "Request violates a domain rule"),
 )
@@ -112,7 +118,10 @@ def register_problem_handlers(app: FastAPI) -> None:
     async def _domain_error(request: Request, exc: DomainError) -> JSONResponse:
         for error_class, status, slug, title in _DOMAIN_PROBLEMS:
             if isinstance(exc, error_class):
-                return problem_response(request, status, slug, title, detail=str(exc))
+                headers = {"WWW-Authenticate": "Bearer"} if status == 401 else None
+                return problem_response(
+                    request, status, slug, title, detail=str(exc), headers=headers
+                )
         raise exc  # pragma: no cover - DomainError itself is in the table
 
     @app.exception_handler(RequestValidationError)

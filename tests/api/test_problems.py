@@ -7,19 +7,24 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from scitracker.api.app import create_app
-from scitracker.api.deps import ReadRepositories
 from scitracker.domain.errors import (
+    AuthenticationError,
     DomainError,
     DuplicateRecordError,
     InvalidStatusTransitionError,
     InvalidValueError,
+    PermissionDeniedError,
+    QuotaExceededError,
     RecordNotFoundError,
 )
+from scitracker.security.passwords import Argon2PasswordHasher
+from scitracker.security.tokens import JwtTokenService
+from scitracker.services.ports import UnitOfWork
 
 PROBLEM = "urn:scitracker:problem:"
 
 
-def unused_scope() -> AbstractContextManager[ReadRepositories]:
+def unused_scope() -> AbstractContextManager[UnitOfWork]:
     raise AssertionError("these tests never touch the repositories")
 
 
@@ -28,7 +33,12 @@ def ok() -> None:
 
 
 def make_app(ping: Callable[[], None] = ok) -> FastAPI:
-    return create_app(read_scope=unused_scope, ping=ping)
+    return create_app(
+        scope=unused_scope,
+        ping=ping,
+        hasher=Argon2PasswordHasher(),
+        tokens=JwtTokenService("t" * 40),
+    )
 
 
 CASES = [
@@ -37,6 +47,9 @@ CASES = [
     (RecordNotFoundError("missing"), 404, "not-found"),
     (InvalidStatusTransitionError("to_read", "done", "skip"), 409, "invalid-status-transition"),
     (DomainError("generic"), 400, "domain-error"),
+    (AuthenticationError("no"), 401, "authentication-failed"),
+    (PermissionDeniedError("no"), 403, "forbidden"),
+    (QuotaExceededError("full"), 409, "quota-exceeded"),
 ]
 
 
@@ -108,3 +121,13 @@ def test_openapi_describes_endpoints_and_the_problem_schema() -> None:
     assert "/api/v1/publications/{publication_id}" in spec["paths"]
     assert "/healthz" in spec["paths"]
     assert "ProblemDetails" in spec["components"]["schemas"]
+
+
+def test_401_carries_the_www_authenticate_header() -> None:
+    app = make_app()
+
+    @app.get("/secure")
+    def secure() -> None:
+        raise AuthenticationError("no")
+
+    assert TestClient(app).get("/secure").headers["www-authenticate"] == "Bearer"

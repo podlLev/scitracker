@@ -2,6 +2,8 @@ from dataclasses import replace
 
 from scitracker.domain.errors import DuplicateRecordError
 from scitracker.domain.publication import Publication
+from scitracker.domain.topic import Topic
+from scitracker.domain.user import User
 from scitracker.services.errors import SourceError
 from scitracker.services.ports import SourceResult
 
@@ -82,3 +84,60 @@ class StubSource:
 
 def unavailable(name: str) -> StubSource:
     return StubSource(name, error=SourceError(name, "giving up after 3 attempts: HTTP 503"))
+
+
+class InMemoryUserRepository:
+    def __init__(self) -> None:
+        self._items: dict[int, User] = {}
+
+    def add(self, user: User) -> User:
+        if self.get_by_email(user.email) is not None:
+            raise DuplicateRecordError("email taken")
+        stored = replace(user, id=len(self._items) + 1)
+        self._items[stored.id or 0] = stored
+        return stored
+
+    def get(self, user_id: int) -> User | None:
+        return self._items.get(user_id)
+
+    def get_by_email(self, email: str) -> User | None:
+        return next((u for u in self._items.values() if u.email == email), None)
+
+
+class InMemoryTopicRepository:
+    def __init__(self) -> None:
+        self._items: dict[int, Topic] = {}
+
+    def add(self, topic: Topic) -> Topic:
+        stored = replace(topic, id=len(self._items) + 1)
+        self._items[stored.id or 0] = stored
+        return stored
+
+    def get(self, topic_id: int) -> Topic | None:
+        return self._items.get(topic_id)
+
+    def list_all(self) -> list[Topic]:
+        return list(self._items.values())
+
+    def list_public(self) -> list[Topic]:
+        return [t for t in self._items.values() if t.owner_id is None]
+
+    def list_owned(self, owner_id: int) -> list[Topic]:
+        return [t for t in self._items.values() if t.owner_id == owner_id]
+
+    def delete(self, topic_id: int) -> bool:
+        return self._items.pop(topic_id, None) is not None
+
+
+class FakeHasher:
+    def __init__(self) -> None:
+        self.hashed = 0
+        self.verified_with: list[str | None] = []
+
+    def hash_password(self, password: str) -> str:
+        self.hashed += 1
+        return f"hashed:{password}"
+
+    def verify_password(self, password_hash: str | None, password: str) -> bool:
+        self.verified_with.append(password_hash)
+        return password_hash == f"hashed:{password}"
