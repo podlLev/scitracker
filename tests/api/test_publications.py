@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 
 from scitracker.domain.publication import Author, Publication
 from scitracker.domain.topic import Topic
-from scitracker.storage.repositories import SqlPublicationRepository, SqlTopicRepository
+from scitracker.domain.user import User
+from scitracker.storage.repositories import (
+    SqlPublicationRepository,
+    SqlTopicRepository,
+    SqlUserRepository,
+)
 
 URL = "/api/v1/publications"
 PROBLEM = "urn:scitracker:problem:"
@@ -157,10 +162,13 @@ def test_validation_errors_name_fields_and_do_not_echo_input(client: TestClient)
 
 
 def test_topics_endpoint_lists_only_public_topics(client: TestClient, session: Session) -> None:
+    owner = SqlUserRepository(session).add(User(email="o@example.com", password_hash="x"))
     repo = SqlTopicRepository(session)
     repo.add(Topic(name="Public", query="p"))
+    repo.add(Topic(name="Private", query="q", owner_id=owner.id))
     response = client.get("/api/v1/topics")
     assert [t["name"] for t in response.json()] == ["Public"]
+    assert response.json()[0]["public"] is True
 
 
 def test_healthz_is_ok(client: TestClient) -> None:
