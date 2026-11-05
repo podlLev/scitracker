@@ -15,7 +15,7 @@
 - [x] Шар зберігання (PostgreSQL, міграції, seed-дані)
 - [x] Клієнти arXiv і Crossref
 - [x] Нормалізація та дедуплікація
-- [ ] REST API
+- [x] REST API
 - [ ] Автентифікація, ролі, читацький список, нотатки
 - [ ] CLI, експорт BibTeX, статистика
 - [ ] Docker і розгортання
@@ -56,7 +56,7 @@ src/scitracker/
 ├── services/   # сценарії використання, порти, помилки, збір та дедуплікація
 ├── sources/    # адаптери arXiv та Crossref, HTTP-шар із retry
 ├── storage/    # моделі БД, репозиторії, міграції, seed
-└── api/        # маршрути FastAPI
+└── api/        # маршрути FastAPI, схеми, помилки
 ```
 
 Межі шарів перевіряються автоматично командою `lint-imports` (налаштування в `pyproject.toml`).
@@ -123,6 +123,16 @@ uv run --env-file .env python -m scitracker.collect
 ```
 
 Для кожної теми запитує arXiv і Crossref паралельно, об'єднує дублікати за DOI та arXiv ID й виводить підсумок (створено, об'єднано, відхилено, збої джерел). Потрібна `CROSSREF_MAILTO` у `.env`.
+
+### Запуск API
+
+```powershell
+uv run --env-file .env uvicorn scitracker.main:build_app --factory --reload
+```
+
+Документація Swagger: http://127.0.0.1:8000/docs, перевірка працездатності: `/healthz`.
+Пошук: `GET /api/v1/publications?q=&author=&topic=&from=&cursor=&limit=`.
+Помилки повертаються у форматі `application/problem+json` (RFC 9457).
 
 ## Процес роботи
 
