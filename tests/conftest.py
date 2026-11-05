@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from scitracker.storage.database import create_db_engine
 from tests.settings import get_test_database_url
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="session")
