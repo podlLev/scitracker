@@ -1,0 +1,55 @@
+﻿BEGIN
+CREATE EXTENSION
+DROP INDEX
+INSERT 0 200000
+ANALYZE
+=== BEFORE: no trigram index ===
+                                                              QUERY PLAN
+--------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=5187.93..5189.80 rows=16 width=4) (actual time=45.799..48.764 rows=1 loops=1)
+   Buffers: shared hit=3214
+   ->  Gather Merge  (cost=5187.93..5189.80 rows=16 width=4) (actual time=45.796..48.759 rows=1 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=3214
+         ->  Sort  (cost=4187.91..4187.93 rows=8 width=4) (actual time=41.892..41.893 rows=0 loops=3)
+               Sort Key: id DESC
+               Sort Method: quicksort  Memory: 25kB
+               Buffers: shared hit=3214
+               Worker 0:  Sort Method: quicksort  Memory: 25kB
+               Worker 1:  Sort Method: quicksort  Memory: 25kB
+               ->  Parallel Seq Scan on publications  (cost=0.00..4187.79 rows=8 width=4) (actual time=27.245..41.855 rows=0 loops=3)
+                     Filter: ((title)::text ~~* '%f1c15925%'::text)
+                     Rows Removed by Filter: 66930
+                     Buffers: shared hit=3142
+ Planning:
+   Buffers: shared hit=62 read=2
+ Planning Time: 0.793 ms
+ Execution Time: 48.793 ms
+(20 rows)
+
+CREATE INDEX
+ANALYZE
+=== AFTER: GIN trigram index ===
+                                                                   QUERY PLAN
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=161.91..161.96 rows=20 width=4) (actual time=0.229..0.231 rows=1 loops=1)
+   Buffers: shared hit=20
+   ->  Sort  (cost=161.91..161.96 rows=20 width=4) (actual time=0.228..0.228 rows=1 loops=1)
+         Sort Key: id DESC
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=20
+         ->  Bitmap Heap Scan on publications  (cost=86.01..161.47 rows=20 width=4) (actual time=0.224..0.225 rows=1 loops=1)
+               Recheck Cond: ((title)::text ~~* '%f1c15925%'::text)
+               Heap Blocks: exact=1
+               Buffers: shared hit=20
+               ->  Bitmap Index Scan on ix_publications_title_trgm  (cost=0.00..86.01 rows=20 width=0) (actual time=0.215..0.215 rows=1 loops=1)
+                     Index Cond: ((title)::text ~~* '%f1c15925%'::text)
+                     Buffers: shared hit=19
+ Planning:
+   Buffers: shared hit=19 dirtied=1
+ Planning Time: 0.281 ms
+ Execution Time: 0.243 ms
+(17 rows)
+
+ROLLBACK

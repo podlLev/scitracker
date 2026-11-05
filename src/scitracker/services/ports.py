@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Protocol
 
 from scitracker.domain.publication import Publication
@@ -60,3 +61,21 @@ class TopicRepository(Protocol):
     def add(self, topic: Topic) -> Topic: ...
 
     def list_all(self) -> list[Topic]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class SearchCriteria:
+    query: str | None = None
+    author: str | None = None
+    topic_id: int | None = None
+    published_from: date | None = None
+
+
+class PublicationReader(Protocol):
+    def get(self, publication_id: int) -> Publication | None: ...
+
+    def search(
+        self, criteria: SearchCriteria, *, after_id: int | None, limit: int
+    ) -> list[Publication]:
+        """Newest first (by id); only records with an id below `after_id`."""
+        ...
