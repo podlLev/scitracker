@@ -52,7 +52,11 @@ class PublicationRepository(Protocol):
 
 
 class UserRepository(Protocol):
-    def add(self, user: User) -> User: ...
+    def add(self, user: User) -> User:
+        """Raise DuplicateRecordError if the email is taken."""
+        ...
+
+    def get(self, user_id: int) -> User | None: ...
 
     def get_by_email(self, email: str) -> User | None: ...
 
@@ -60,7 +64,17 @@ class UserRepository(Protocol):
 class TopicRepository(Protocol):
     def add(self, topic: Topic) -> Topic: ...
 
+    def get(self, topic_id: int) -> Topic | None: ...
+
     def list_all(self) -> list[Topic]: ...
+
+    def list_public(self) -> list[Topic]: ...
+
+    def list_owned(self, owner_id: int) -> list[Topic]: ...
+
+    def delete(self, topic_id: int) -> bool:
+        """False if there was nothing to delete."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,3 +93,37 @@ class PublicationReader(Protocol):
     ) -> list[Publication]:
         """Newest first (by id); only records with an id below `after_id`."""
         ...
+
+
+class PasswordHasher(Protocol):
+    def hash_password(self, password: str) -> str: ...
+
+    def verify_password(self, password_hash: str | None, password: str) -> bool:
+        """With None (unknown user) the check still costs the same time and returns False."""
+        ...
+
+
+class TokenService(Protocol):
+    @property
+    def ttl_seconds(self) -> int: ...
+
+    def issue(self, user_id: int) -> str: ...
+
+    def verify(self, token: str) -> int:
+        """Return the user id; raise AuthenticationError for an invalid or expired token."""
+        ...
+
+
+class UnitOfWork(Protocol):
+    """One request: repositories over one session; the caller decides when to commit."""
+
+    @property
+    def publications(self) -> PublicationReader: ...
+
+    @property
+    def topics(self) -> TopicRepository: ...
+
+    @property
+    def users(self) -> UserRepository: ...
+
+    def commit(self) -> None: ...
