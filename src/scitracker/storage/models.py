@@ -41,6 +41,14 @@ class UserRow(Base):
 
 class AuthorRow(Base):
     __tablename__ = "authors"
+    __table_args__ = (
+        Index(
+            "ix_authors_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # Unique by name is a temporary simplification (see ADR-003 on author identity).
@@ -70,6 +78,12 @@ class PublicationRow(Base):
     __table_args__ = (
         CheckConstraint("doi IS NOT NULL OR arxiv_id IS NOT NULL", name="has_identifier"),
         Index("ix_publications_published_on", "published_on"),
+        Index(
+            "ix_publications_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
