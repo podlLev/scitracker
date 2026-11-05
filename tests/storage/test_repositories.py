@@ -164,3 +164,31 @@ def test_failed_insert_leaves_no_orphan_authors(session: Session) -> None:
     with pytest.raises(DuplicateRecordError):
         repo.add(Publication(title="T", authors=[Author("Zed Nobody")], doi="10.1000/a"))
     assert session.scalars(select(AuthorRow).where(AuthorRow.name == "Zed Nobody")).first() is None
+
+
+def test_topic_visibility_queries_and_delete(session: Session) -> None:
+    owner = SqlUserRepository(session).add(User(email="o@example.com", password_hash="h"))
+    assert owner.id is not None
+    repo = SqlTopicRepository(session)
+    public = repo.add(Topic(name="Public", query="p"))
+    private = repo.add(Topic(name="Private", query="q", owner_id=owner.id))
+    assert [t.name for t in repo.list_public()] == ["Public"]
+    assert [t.name for t in repo.list_owned(owner.id)] == ["Private"]
+    assert public.id is not None
+    assert private.id is not None
+    found = repo.get(private.id)
+    assert found is not None
+    assert found.owner_id == owner.id
+    assert repo.delete(private.id) is True
+    assert repo.delete(private.id) is False
+    assert repo.get(private.id) is None
+
+
+def test_user_lookup_by_id(session: Session) -> None:
+    repo = SqlUserRepository(session)
+    saved = repo.add(User(email="a@example.com", password_hash="h"))
+    assert saved.id is not None
+    found = repo.get(saved.id)
+    assert found is not None
+    assert found.email == "a@example.com"
+    assert repo.get(999_999) is None
