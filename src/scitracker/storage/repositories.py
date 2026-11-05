@@ -1,12 +1,13 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from scitracker.domain.errors import DuplicateRecordError, InvalidValueError, RecordNotFoundError
 from scitracker.domain.publication import Author, Publication
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import Role, User
+from scitracker.services.ports import SearchCriteria
 from scitracker.storage.models import (
     AuthorRow,
     PublicationAuthorRow,
@@ -40,6 +41,11 @@ def _publication_to_domain(row: PublicationRow) -> Publication:
         published_on=row.published_on,
         url=row.url,
     )
+
+
+def _contains(term: str) -> str:
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 class SqlPublicationRepository:
@@ -109,6 +115,41 @@ class SqlPublicationRepository:
         if not conditions:
             return []
         stmt = select(PublicationRow).where(or_(*conditions)).order_by(PublicationRow.id)
+        return [_publication_to_domain(row) for row in self._session.scalars(stmt)]
+
+    def search(
+        self, criteria: SearchCriteria, *, after_id: int | None, limit: int
+    ) -> list[Publication]:
+        stmt = (
+            select(PublicationRow)
+            .options(
+                selectinload(PublicationRow.author_links).selectinload(PublicationAuthorRow.author)
+            )
+            .order_by(PublicationRow.id.desc())
+            .limit(limit)
+        )
+        if after_id is not None:
+            stmt = stmt.where(PublicationRow.id < after_id)
+        if criteria.query:
+            stmt = stmt.where(PublicationRow.title.ilike(_contains(criteria.query)))
+        if criteria.author:
+            stmt = stmt.where(
+                PublicationRow.author_links.any(
+                    PublicationAuthorRow.author.has(
+                        AuthorRow.name.ilike(_contains(criteria.author))
+                    )
+                )
+            )
+        if criteria.topic_id is not None:
+            stmt = stmt.where(
+                PublicationRow.id.in_(
+                    select(PublicationTopicRow.publication_id).where(
+                        PublicationTopicRow.topic_id == criteria.topic_id
+                    )
+                )
+            )
+        if criteria.published_from is not None:
+            stmt = stmt.where(PublicationRow.published_on >= criteria.published_from)
         return [_publication_to_domain(row) for row in self._session.scalars(stmt)]
 
     def link_topic(self, publication_id: int, topic_id: int) -> bool:
