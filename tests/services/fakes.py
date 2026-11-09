@@ -1,11 +1,14 @@
 from dataclasses import replace
+from datetime import datetime
 
 from scitracker.domain.errors import DuplicateRecordError
 from scitracker.domain.publication import Publication
+from scitracker.domain.reading import Note, ReadingItem, StatusChange
+from scitracker.domain.status import ReadingStatus
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
 from scitracker.services.errors import SourceError
-from scitracker.services.ports import SourceResult
+from scitracker.services.ports import SearchCriteria, SourceResult
 
 
 class InMemoryPublicationRepository:
@@ -141,3 +144,77 @@ class FakeHasher:
     def verify_password(self, password_hash: str | None, password: str) -> bool:
         self.verified_with.append(password_hash)
         return password_hash == f"hashed:{password}"
+
+
+class StubPublicationReader:
+    def __init__(self, *known_ids: int) -> None:
+        self._known = set(known_ids)
+
+    def get(self, publication_id: int) -> Publication | None:
+        if publication_id not in self._known:
+            return None
+        return Publication(
+            title="Known", authors=[], doi=f"10.1000/{publication_id}", id=publication_id
+        )
+
+    def search(
+        self, criteria: SearchCriteria, *, after_id: int | None, limit: int
+    ) -> list[Publication]:
+        return []
+
+
+class InMemoryReadingListRepository:
+    def __init__(self) -> None:
+        self.items: dict[int, ReadingItem] = {}
+        self.changes: dict[int, list[StatusChange]] = {}
+        self.notes: dict[int, list[Note]] = {}
+        self.locked: list[int] = []
+
+    def add_if_absent(
+        self, user_id: int, publication_id: int, at: datetime
+    ) -> tuple[ReadingItem, bool]:
+        for item in self.items.values():
+            if (item.user_id, item.publication_id) == (user_id, publication_id):
+                return replace(item), False
+        new = ReadingItem(
+            user_id=user_id, publication_id=publication_id, added_at=at, id=len(self.items) + 1
+        )
+        self.items[new.id or 0] = new
+        return replace(new), True
+
+    def get(self, item_id: int, user_id: int) -> ReadingItem | None:
+        item = self.items.get(item_id)
+        return replace(item) if item is not None and item.user_id == user_id else None
+
+    def get_for_update(self, item_id: int, user_id: int) -> ReadingItem | None:
+        self.locked.append(item_id)
+        return self.get(item_id, user_id)
+
+    def save_status(self, item: ReadingItem, change: StatusChange) -> None:
+        assert item.id is not None
+        self.items[item.id] = replace(item)
+        self.changes.setdefault(item.id, []).append(change)
+
+    def list_for_user(
+        self, user_id: int, *, status: ReadingStatus | None, after_id: int | None, limit: int
+    ) -> list[ReadingItem]:
+        found = [
+            replace(i)
+            for i in sorted(self.items.values(), key=lambda i: -(i.id or 0))
+            if i.user_id == user_id
+            and (status is None or i.status is status)
+            and (after_id is None or (i.id or 0) < after_id)
+        ]
+        return found[:limit]
+
+    def history(self, item_id: int) -> list[StatusChange]:
+        return list(self.changes.get(item_id, []))
+
+    def add_note(self, note: Note) -> Note:
+        assert note.reading_item_id is not None
+        stored = replace(note, id=sum(len(v) for v in self.notes.values()) + 1)
+        self.notes.setdefault(note.reading_item_id, []).append(stored)
+        return stored
+
+    def list_notes(self, item_id: int) -> list[Note]:
+        return list(self.notes.get(item_id, []))
