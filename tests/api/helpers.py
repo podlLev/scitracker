@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -21,3 +23,16 @@ def login(client: TestClient, email: str) -> dict[str, str]:
     response = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+class FakeClock:
+    """The API's notion of 'now', controlled by the test."""
+
+    def __init__(self) -> None:
+        self.now = datetime(2026, 11, 1, 12, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, **kwargs: float) -> None:
+        self.now += timedelta(**kwargs)

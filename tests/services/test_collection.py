@@ -64,3 +64,12 @@ def test_topic_must_be_persisted() -> None:
             Topic(name="x", query="x"),
             FetchedTopic([], []),
         )
+
+
+def test_conflicting_record_is_counted_and_not_linked() -> None:
+    repo = InMemoryPublicationRepository()
+    repo.add(Publication(title="A", authors=[], doi="10.1000/x"))
+    repo.add(Publication(title="B", authors=[], arxiv_id="2101.00001"))
+    clash = Publication(title="C", authors=[], doi="10.1000/x", arxiv_id="2101.00001")
+    report = store_topic(repo, TOPIC, FetchedTopic([], [[clash]]))
+    assert (report.conflicts, report.new_links) == (1, 0)
