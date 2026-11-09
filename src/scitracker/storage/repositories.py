@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -5,14 +7,19 @@ from sqlalchemy.orm import Session, selectinload
 
 from scitracker.domain.errors import DuplicateRecordError, InvalidValueError, RecordNotFoundError
 from scitracker.domain.publication import Author, Publication
+from scitracker.domain.reading import Note, ReadingItem, StatusChange
+from scitracker.domain.status import ReadingStatus
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import Role, User
 from scitracker.services.ports import SearchCriteria
 from scitracker.storage.models import (
     AuthorRow,
+    NoteRow,
     PublicationAuthorRow,
     PublicationRow,
     PublicationTopicRow,
+    ReadingItemRow,
+    StatusChangeRow,
     TopicRow,
     UserRow,
 )
@@ -48,6 +55,17 @@ def _contains(term: str) -> str:
     return f"%{escaped}%"
 
 
+def _item_to_domain(row: ReadingItemRow) -> ReadingItem:
+    return ReadingItem(
+        id=row.id,
+        user_id=row.user_id,
+        publication_id=row.publication_id,
+        added_at=row.added_at,
+        status=ReadingStatus(row.status),
+        finished_at=row.finished_at,
+    )
+
+
 class SqlPublicationRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -78,7 +96,7 @@ class SqlPublicationRepository:
         if publication.id is None:
             raise InvalidValueError("cannot update a publication without an id")
         row = self._session.get(PublicationRow, publication.id)
-        if row is None:
+        if row is None:  # pragma: no cover - the item was just loaded under lock
             raise RecordNotFoundError(f"publication {publication.id} does not exist")
         try:
             with self._session.begin_nested():
@@ -242,3 +260,119 @@ class SqlTopicRepository:
     @staticmethod
     def _to_domain(row: TopicRow) -> Topic:
         return Topic(id=row.id, name=row.name, query=row.query, owner_id=row.owner_id)
+
+
+class SqlReadingListRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def add_if_absent(
+        self, user_id: int, publication_id: int, at: datetime
+    ) -> tuple[ReadingItem, bool]:
+        # The unique constraint decides, not a prior SELECT: no race between check and insert.
+        stmt = (
+            insert(ReadingItemRow)
+            .values(user_id=user_id, publication_id=publication_id, status="to_read", added_at=at)
+            .on_conflict_do_nothing(index_elements=["user_id", "publication_id"])
+            .returning(ReadingItemRow.id)
+        )
+        created = self._session.execute(stmt).scalar_one_or_none() is not None
+        row = self._session.scalars(
+            select(ReadingItemRow)
+            .where(
+                ReadingItemRow.user_id == user_id,
+                ReadingItemRow.publication_id == publication_id,
+            )
+            .execution_options(populate_existing=True)
+        ).one()
+        return _item_to_domain(row), created
+
+    def get(self, item_id: int, user_id: int) -> ReadingItem | None:
+        return self._load(item_id, user_id, lock=False)
+
+    def get_for_update(self, item_id: int, user_id: int) -> ReadingItem | None:
+        return self._load(item_id, user_id, lock=True)
+
+    def save_status(self, item: ReadingItem, change: StatusChange) -> None:
+        row: ReadingItemRow | None = (
+            self._session.get(ReadingItemRow, item.id) if item.id is not None else None
+        )
+        if row is None:  # pragma: no cover - the item was just loaded under lock
+            raise RecordNotFoundError("reading list item does not exist")
+        row.status = str(item.status)
+        row.finished_at = item.finished_at
+        self._session.add(
+            StatusChangeRow(
+                reading_item_id=row.id,
+                from_status=str(change.from_status),
+                to_status=str(change.to_status),
+                changed_at=change.changed_at,
+            )
+        )
+        self._session.flush()
+
+    def list_for_user(
+        self, user_id: int, *, status: ReadingStatus | None, after_id: int | None, limit: int
+    ) -> list[ReadingItem]:
+        stmt = (
+            select(ReadingItemRow)
+            .where(ReadingItemRow.user_id == user_id)
+            .order_by(ReadingItemRow.id.desc())
+            .limit(limit)
+        )
+        if status is not None:
+            stmt = stmt.where(ReadingItemRow.status == str(status))
+        if after_id is not None:
+            stmt = stmt.where(ReadingItemRow.id < after_id)
+        return [_item_to_domain(row) for row in self._session.scalars(stmt)]
+
+    def history(self, item_id: int) -> list[StatusChange]:
+        stmt = (
+            select(StatusChangeRow)
+            .where(StatusChangeRow.reading_item_id == item_id)
+            .order_by(StatusChangeRow.id)
+        )
+        return [
+            StatusChange(
+                ReadingStatus(row.from_status), ReadingStatus(row.to_status), row.changed_at
+            )
+            for row in self._session.scalars(stmt)
+        ]
+
+    def add_note(self, note: Note) -> Note:
+        if note.reading_item_id is None:
+            raise InvalidValueError("a note must belong to a reading list item")
+        row = NoteRow(
+            reading_item_id=note.reading_item_id, text=note.text, created_at=note.created_at
+        )
+        self._session.add(row)
+        self._session.flush()
+        return Note(
+            id=row.id,
+            reading_item_id=row.reading_item_id,
+            text=row.text,
+            created_at=row.created_at,
+        )
+
+    def list_notes(self, item_id: int) -> list[Note]:
+        stmt = select(NoteRow).where(NoteRow.reading_item_id == item_id).order_by(NoteRow.id)
+        return [
+            Note(
+                id=row.id,
+                reading_item_id=row.reading_item_id,
+                text=row.text,
+                created_at=row.created_at,
+            )
+            for row in self._session.scalars(stmt)
+        ]
+
+    def _load(self, item_id: int, user_id: int, *, lock: bool) -> ReadingItem | None:
+        stmt = select(ReadingItemRow).where(
+            ReadingItemRow.id == item_id, ReadingItemRow.user_id == user_id
+        )
+        # populate_existing: after waiting for a lock, read the state the winner committed.
+        stmt = stmt.execution_options(populate_existing=True)
+        if lock:
+            stmt = stmt.with_for_update()
+        row = self._session.scalars(stmt).first()
+        return _item_to_domain(row) if row is not None else None
