@@ -16,7 +16,8 @@
 - [x] Клієнти arXiv і Crossref
 - [x] Нормалізація та дедуплікація
 - [x] REST API
-- [x] Автентифікація, ролі, читацький список, нотатки
+- [x] Автентифікація, ролі, теми користувачів
+- [x] Читацький список: статуси, історія, нотатки
 - [ ] CLI, експорт BibTeX, статистика
 - [ ] Docker і розгортання
 
@@ -161,6 +162,16 @@ uv run --env-file .env python -m scitracker.create_admin
 ```
 
 Реєстрація: `POST /api/v1/auth/register`, вхід: `POST /api/v1/auth/login` повертає токен (30 хв). У Swagger натисніть **Authorize** і вставте токен. Гість лише шукає публікації; користувач керує приватними темами (до 20); адміністратор створює й видаляє публічні.
+
+### Читацький список
+
+Усі запити потребують токена (`Authorize` у Swagger).
+
+- `POST /api/v1/reading-list` `{publication_id}`: додати публікацію (повтор повертає наявний елемент)
+- `PATCH /api/v1/reading-list/{id}` `{status}`: `to_read` → `reading` → `done`; пропуск статусу дає 409
+- `GET /api/v1/reading-list?status=&cursor=&limit=`: мій список
+- `GET /api/v1/reading-list/{id}/history`: історія змін статусу
+- `POST` і `GET /api/v1/reading-list/{id}/notes`: приватні нотатки
 
 ## Процес роботи
 
