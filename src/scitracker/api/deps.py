@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import Depends, Request
@@ -56,3 +57,11 @@ def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def get_now(request: Request) -> datetime:
+    clock: Callable[[], datetime] = request.app.state.clock
+    return clock()
+
+
+Now = Annotated[datetime, Depends(get_now)]

@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Protocol
 
 from scitracker.domain.publication import Publication
+from scitracker.domain.reading import Note, ReadingItem, StatusChange
+from scitracker.domain.status import ReadingStatus
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
 
@@ -114,6 +116,38 @@ class TokenService(Protocol):
         ...
 
 
+class ReadingListRepository(Protocol):
+    def add_if_absent(
+        self, user_id: int, publication_id: int, at: datetime
+    ) -> tuple[ReadingItem, bool]:
+        """Return the user's item for the publication and whether it was just created."""
+        ...
+
+    def get(self, item_id: int, user_id: int) -> ReadingItem | None:
+        """Only the owner's items: a foreign item looks exactly like a missing one."""
+        ...
+
+    def get_for_update(self, item_id: int, user_id: int) -> ReadingItem | None:
+        """Like `get`, but locks the row until the end of the transaction."""
+        ...
+
+    def save_status(self, item: ReadingItem, change: StatusChange) -> None:
+        """Store the new status and the history entry in the current transaction."""
+        ...
+
+    def list_for_user(
+        self, user_id: int, *, status: ReadingStatus | None, after_id: int | None, limit: int
+    ) -> list[ReadingItem]:
+        """Newest first (by id); only records with an id below `after_id`."""
+        ...
+
+    def history(self, item_id: int) -> list[StatusChange]: ...
+
+    def add_note(self, note: Note) -> Note: ...
+
+    def list_notes(self, item_id: int) -> list[Note]: ...
+
+
 class UnitOfWork(Protocol):
     """One request: repositories over one session; the caller decides when to commit."""
 
@@ -125,5 +159,8 @@ class UnitOfWork(Protocol):
 
     @property
     def users(self) -> UserRepository: ...
+
+    @property
+    def reading(self) -> ReadingListRepository: ...
 
     def commit(self) -> None: ...

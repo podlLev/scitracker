@@ -12,7 +12,7 @@ from scitracker.security.passwords import Argon2PasswordHasher
 from scitracker.security.tokens import JwtTokenService
 from scitracker.services.ports import UnitOfWork
 from scitracker.storage.unit_of_work import SqlUnitOfWork
-from tests.api.helpers import TEST_SECRET
+from tests.api.helpers import TEST_SECRET, FakeClock
 
 
 class FlushOnlyUnitOfWork(SqlUnitOfWork):
@@ -32,7 +32,14 @@ def hasher() -> Argon2PasswordHasher:
 
 
 @pytest.fixture
-def client(session: Session, hasher: Argon2PasswordHasher) -> Iterator[TestClient]:
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture
+def client(
+    session: Session, hasher: Argon2PasswordHasher, clock: FakeClock
+) -> Iterator[TestClient]:
     """The real API over the real repositories, inside the test's rolled-back transaction."""
 
     @contextmanager
@@ -42,6 +49,12 @@ def client(session: Session, hasher: Argon2PasswordHasher) -> Iterator[TestClien
     def ping() -> None:
         session.execute(text("SELECT 1"))
 
-    app = create_app(scope=scope, ping=ping, hasher=hasher, tokens=JwtTokenService(TEST_SECRET))
+    app = create_app(
+        scope=scope,
+        ping=ping,
+        hasher=hasher,
+        tokens=JwtTokenService(TEST_SECRET),
+        clock=clock,
+    )
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
