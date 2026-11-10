@@ -1,7 +1,8 @@
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,7 @@ from scitracker.domain.errors import DuplicateRecordError, InvalidValueError, Re
 from scitracker.domain.publication import Author, Publication
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
+from scitracker.storage.database import create_db_engine
 from scitracker.storage.models import AuthorRow, ReadingItemRow
 from scitracker.storage.repositories import (
     SqlPublicationRepository,
@@ -192,3 +194,51 @@ def test_user_lookup_by_id(session: Session) -> None:
     assert found is not None
     assert found.email == "a@example.com"
     assert repo.get(999_999) is None
+
+
+def count_statements(session: Session, work: Callable[[], object]) -> int:
+    statements = 0
+
+    def on_execute(*_: object) -> None:
+        nonlocal statements
+        statements += 1
+
+    engine = session.get_bind()
+    event.listen(engine, "before_cursor_execute", on_execute)
+    try:
+        work()
+    finally:
+        event.remove(engine, "before_cursor_execute", on_execute)
+    return statements
+
+
+def test_authors_keep_publication_order_and_are_shared(session: Session) -> None:
+    repo = SqlPublicationRepository(session)
+    saved = repo.add(
+        Publication(
+            title="T",
+            authors=[Author("Zed"), Author("Ann"), Author("Zed"), Author("Bob")],
+            doi="10.1000/order",
+        )
+    )
+    assert [a.name for a in saved.authors] == ["Zed", "Ann", "Bob"]
+    repo.add(Publication(title="U", authors=[Author("Ann")], doi="10.1000/order2"))
+    assert session.scalar(select(func.count()).select_from(AuthorRow)) == 3
+
+
+def test_authors_cost_the_same_number_of_statements_however_many_there_are(
+    session: Session,
+) -> None:
+    repo = SqlPublicationRepository(session)
+    few = Publication(title="A", authors=[Author(f"Few {n}") for n in range(3)], doi="10.1000/few")
+    many = Publication(
+        title="B", authors=[Author(f"Many {n}") for n in range(12)], doi="10.1000/many"
+    )
+    assert (
+        count_statements(session, lambda: repo.add(many))
+        <= count_statements(session, lambda: repo.add(few)) + 1
+    )
+
+
+def test_engine_hides_bound_parameters_in_errors() -> None:
+    assert create_db_engine("postgresql+psycopg://u:p@127.0.0.1:1/x").hide_parameters is True
