@@ -20,6 +20,7 @@
 - [x] Читацький список: статуси, історія, нотатки
 - [x] Аналітика й стрічка
 - [x] CLI, експорт BibTeX, збір за розкладом
+- [x] Спостережуваність: структуровані журнали, `X-Request-ID`, профілювання
 - [ ] Docker і розгортання
 
 ## Можливості (план)
@@ -33,17 +34,18 @@
 
 ## Стек
 
-| Компонент              | Інструмент                                             |
-|------------------------|--------------------------------------------------------|
-| Мова                   | Python 3.12+                                           |
-| Керування залежностями | uv                                                     |
-| База даних             | PostgreSQL (див. [ADR-002](docs/adr/0002-database.md)) |
-| ORM і міграції         | SQLAlchemy 2.0, Alembic                                |
-| HTTP-клієнт            | httpx, defusedxml (безпечний розбір XML)               |
-| API                    | FastAPI, Pydantic                                      |
-| Якість коду            | ruff, mypy (strict), pytest, import-linter             |
-| CI                     | GitHub Actions                                         |
-| Контейнеризація        | Docker, Docker Compose                                 |
+| Компонент              | Інструмент                                                                                                  |
+|------------------------|-------------------------------------------------------------------------------------------------------------|
+| Мова                   | Python 3.12+                                                                                                |
+| Керування залежностями | uv                                                                                                          |
+| База даних             | PostgreSQL (див. [ADR-002](docs/adr/0002-database.md))                                                      |
+| ORM і міграції         | SQLAlchemy 2.0, Alembic                                                                                     |
+| HTTP-клієнт            | httpx, defusedxml (безпечний розбір XML)                                                                    |
+| API                    | FastAPI, Pydantic                                                                                           |
+| Якість коду            | ruff, mypy (strict), pytest, import-linter                                                                  |
+| CI                     | GitHub Actions                                                                                              |
+| Контейнеризація        | Docker, Docker Compose                                                                                      |
+| Журнали                | стандартний `logging`, власний JSON-форматер [ADR-009](docs/adr/0009-structured-logging-and-request-id.md)) |
 
 Обґрунтування вибору інструментів і розглянуті альтернативи: [ADR-001](docs/adr/0001-technology-stack.md).
 Не всі компоненти вже підключено: клієнти, API та автентифікація з'являться пізніше.
@@ -54,13 +56,16 @@
 
 ```
 src/scitracker/
-├── domain/     # моделі та правила предметної області
-├── services/   # сценарії використання, порти, помилки, збір та дедуплікація
-├── sources/    # адаптери arXiv та Crossref, HTTP-шар із retry
-├── storage/    # моделі БД, репозиторії, міграції, seed
-├── api/        # маршрути FastAPI, схеми, помилки
-├── security/   # паролі (argon2id), JWT
-└── cli.py, jobs.py, scheduler.py  # командний рядок і розклад
+├── domain/         # моделі та правила предметної області
+├── services/       # сценарії використання, порти, помилки
+├── sources/        # адаптери arXiv та Crossref, HTTP-шар із retry
+├── storage/        # моделі БД, репозиторії, міграції, seed
+├── security/       # паролі (argon2id), JWT
+├── observability/  # журнали (JSON), correlation ID, редакція секретів
+├── api/            # маршрути FastAPI, помилки, middleware
+├── cli.py, jobs.py, scheduler.py   # командний рядок і розклад
+└── main.py         # composition root API
+tools/              # benchmark.py (вимірювання)
 ```
 
 Межі шарів перевіряються автоматично командою `lint-imports` (налаштування в `pyproject.toml`).
@@ -99,12 +104,14 @@ python -m scitracker.storage.seed
 
 Змінні середовища задаються в `.env` (файл не потрапляє до репозиторію, шаблон: `.env.example`).
 
-| Змінна              | Призначення                                                   |
-|---------------------|---------------------------------------------------------------|
-| `DATABASE_URL`      | підключення до PostgreSQL                                     |
-| `TEST_DATABASE_URL` | тестова база (`scitracker_test`)                              |
-| `CROSSREF_MAILTO`   | пошта для «polite pool» Crossref (стабільніші ліміти запитів) |
-| `JWT_SECRET`        | секрет підпису токенів, мінімум 32 символи                    |
+| Змінна              | Призначення                                                                        |
+|---------------------|------------------------------------------------------------------------------------|
+| `DATABASE_URL`      | підключення до PostgreSQL                                                          |
+| `TEST_DATABASE_URL` | тестова база (`scitracker_test`)                                                   |
+| `CROSSREF_MAILTO`   | пошта для «polite pool» Crossref (стабільніші ліміти запитів)                      |
+| `JWT_SECRET`        | секрет підпису токенів, мінімум 32 символи                                         |
+| `LOG_LEVEL`         | рівень журналу: `DEBUG`, `INFO` (за замовчуванням), `WARNING`, `ERROR`, `CRITICAL` |
+| `LOG_FORMAT`        | `json` (за замовчуванням, для серверів) або `text` (зручніше локально)             |
 
 Згенерувати секрет:
 
@@ -198,6 +205,29 @@ uv run --env-file .env scitracker report                # totals of the database
 ```
 
 Для `create-admin` пароль запитується в терміналі; у скриптах його можна передати змінною `SCITRACKER_ADMIN_PASSWORD`. `export-bibtex` приймає `--status to_read|reading|done`. У PowerShell 5.1 використовуйте `--output`, бо перенаправлення `>` пише UTF-16.
+
+### Журнали
+
+Усе пишеться в stderr. `LOG_FORMAT=json` (за замовчуванням) дає по рядку JSON на запис, `text` зручніший локально.
+Кожна відповідь API має заголовок `X-Request-ID`; той самий `request_id` стоїть у всіх записах цього запиту.
+Власний `X-Request-ID` (8-64 символи `A-Za-z0-9._-`) буде збережено. Фонові запуски (`collect`, `schedule`) мають `run-…`.
+Паролі, токени й заголовок `Authorization` до журналів не потрапляють.
+
+Запуск API без дубльованого журналу доступу uvicorn:
+
+```powershell
+uv run --env-file .env uvicorn scitracker.main:build_app --factory --no-access-log
+```
+
+### Продуктивність
+
+Вимірювання лежать у [docs/performance](docs/performance), інструмент: `tools/benchmark.py`
+(працює з тестовою базою `scitracker_test`).
+
+```powershell
+uv run --env-file .env python tools/benchmark.py ingest --output docs/performance/ingest-after.txt
+uv run --env-file .env python tools/benchmark.py status --output docs/performance/status-latency.txt
+```
 
 ## Процес роботи
 
