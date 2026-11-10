@@ -8,6 +8,7 @@ from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
 from scitracker.services.ports import AuthorCount, MonthlyCount, SearchCriteria
 from scitracker.services.reading import change_status
+from scitracker.services.report import TopicTotal
 from scitracker.storage.repositories import (
     SqlPublicationRepository,
     SqlReadingListRepository,
@@ -140,3 +141,22 @@ def test_search_by_several_topics_returns_each_publication_once(session: Session
         SearchCriteria(topic_ids=(first, second)), after_id=None, limit=10
     )
     assert [p.id for p in found] == [only_second, both]
+
+
+def test_overview_counts_everything_and_lists_public_topics_only(session: Session) -> None:
+    users = SqlUserRepository(session)
+    owner = users.add(User(email="o@example.com", password_hash="h"))
+    assert owner.id is not None
+    topics = SqlTopicRepository(session)
+    public = topics.add(Topic(name="Public", query="p"))
+    topics.add(Topic(name="Private", query="q", owner_id=owner.id))
+    assert public.id is not None
+    make_pub(session, 1, published_on=None, topics=(public.id,))
+    SqlPublicationRepository(session).add(
+        Publication(title="No DOI", authors=[], arxiv_id="2101.00001")
+    )
+    overview = SqlStatsRepository(session).overview()
+    assert (overview.publications, overview.without_doi) == (2, 1)
+    assert overview.authors == 1
+    assert (overview.users, overview.reading_items, overview.private_topics) == (1, 0, 1)
+    assert overview.topics == [TopicTotal("Public", 1)]

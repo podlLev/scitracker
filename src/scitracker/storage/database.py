@@ -1,5 +1,9 @@
+from collections.abc import Callable
+
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+SessionFactory = Callable[[], Session]
 
 
 def create_db_engine(url: str) -> Engine:

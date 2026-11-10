@@ -384,3 +384,22 @@ class SqlReadingListRepository:
             stmt = stmt.with_for_update()
         row = self._session.scalars(stmt).first()
         return _item_to_domain(row) if row is not None else None
+
+    def list_with_publications(
+        self, user_id: int, *, status: ReadingStatus | None
+    ) -> list[tuple[ReadingItem, Publication]]:
+        stmt = (
+            select(ReadingItemRow, PublicationRow)
+            .join(PublicationRow, PublicationRow.id == ReadingItemRow.publication_id)
+            .options(
+                selectinload(PublicationRow.author_links).selectinload(PublicationAuthorRow.author)
+            )
+            .where(ReadingItemRow.user_id == user_id)
+            .order_by(ReadingItemRow.id)
+        )
+        if status is not None:
+            stmt = stmt.where(ReadingItemRow.status == str(status))
+        return [
+            (_item_to_domain(item), _publication_to_domain(publication))
+            for item, publication in self._session.execute(stmt)
+        ]
