@@ -12,6 +12,7 @@ from scitracker.cli import CliError, _prompt_password, _use_utf8, build_context,
 from scitracker.config import ConfigError
 from scitracker.domain.publication import Author, Publication
 from scitracker.domain.user import Role, User
+from scitracker.observability.context import request_id_var
 from scitracker.services.collection import CollectionReport, SourceReport
 from scitracker.storage.database import SessionFactory
 from scitracker.storage.repositories import (
@@ -233,3 +234,16 @@ def test_main_schedule_installs_stop_signals(
     exit_code = main(["schedule", "--interval-minutes", "1"])
     assert exit_code == 0
     assert len(signals_installed) > 0
+
+
+def test_collect_runs_inside_its_own_run_id(session_factory: SessionFactory) -> None:
+    seen: list[str | None] = []
+
+    def collect(limit: int) -> list[CollectionReport]:
+        seen.append(request_id_var.get())
+        return []
+
+    assert make_harness(session_factory, collect=collect).run("collect") == 0
+    assert seen[0] is not None
+    assert seen[0].startswith("run-")
+    assert request_id_var.get() is None  # the scope does not leak

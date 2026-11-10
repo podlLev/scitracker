@@ -1,6 +1,5 @@
 import argparse
 import getpass
-import logging
 import os
 import signal
 import sys
@@ -15,6 +14,8 @@ from scitracker.config import ConfigError, Settings
 from scitracker.domain.errors import DomainError
 from scitracker.domain.status import ReadingStatus
 from scitracker.jobs import run_collection
+from scitracker.observability.context import bind_request_id, new_run_id
+from scitracker.observability.logs import LogSettings, configure_logging
 from scitracker.scheduler import run_periodically
 from scitracker.security.passwords import Argon2PasswordHasher
 from scitracker.services.accounts import create_admin_user
@@ -91,7 +92,8 @@ def cmd_seed(ctx: Context, args: argparse.Namespace) -> int:
 
 
 def cmd_collect(ctx: Context, args: argparse.Namespace) -> int:
-    reports = ctx.collect(args.limit)
+    with bind_request_id(new_run_id()):
+        reports = ctx.collect(args.limit)
     if not reports:
         ctx.out.write("There are no topics to collect (run `scitracker seed` or create one).\n")
         return 0
@@ -105,7 +107,8 @@ def cmd_schedule(ctx: Context, args: argparse.Namespace) -> int:
     ctx.out.flush()
 
     def job() -> None:
-        ctx.collect(args.limit)  # store_topic logs the summary of every topic
+        with bind_request_id(new_run_id()):  # one id per scheduled run
+            ctx.collect(args.limit)
 
     runs = run_periodically(job, interval_seconds=args.interval_minutes * 60, stop=ctx.stop)
     ctx.out.write(f"Stopped after {runs} run(s)\n")
@@ -221,7 +224,12 @@ def _use_utf8(stream: TextIO) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=sys.stderr)
+    try:
+        log = LogSettings.from_env(os.environ)
+    except ValueError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 1
+    configure_logging(log.level, log.format)
     _use_utf8(sys.stdout)
     try:
         ctx = build_context(os.environ, sys.stdout, sys.stderr)
