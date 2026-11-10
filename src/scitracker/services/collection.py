@@ -1,9 +1,10 @@
 import asyncio
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from itertools import chain
 
+from scitracker.domain.errors import DomainError
 from scitracker.domain.publication import Publication
 from scitracker.domain.topic import Topic
 from scitracker.services.errors import SourceError
@@ -36,6 +37,7 @@ class CollectionReport:
     unchanged: int = 0
     conflicts: int = 0
     new_links: int = 0
+    error: str | None = None
 
     @property
     def rejected(self) -> int:
@@ -47,11 +49,12 @@ class CollectionReport:
 
     def summary(self) -> str:
         failed = ", ".join(self.failed_sources) or "none"
-        return (
+        text = (
             f"topic={self.topic!r} created={self.created} merged={self.merged} "
             f"unchanged={self.unchanged} conflicts={self.conflicts} "
             f"new_links={self.new_links} rejected={self.rejected} failed_sources={failed}"
         )
+        return f"{text} error={self.error!r}" if self.error else text
 
 
 async def fetch_topic(
@@ -107,3 +110,44 @@ def store_topic(
             report.new_links += 1
     logger.info("collection: %s", report.summary())
     return report
+
+
+Store = Callable[[Topic, FetchedTopic], CollectionReport]
+
+
+async def collect_topics(
+    sources: Sequence[PublicationSource],
+    topics: Sequence[Topic],
+    store: Store,
+    *,
+    limit: int = 50,
+) -> list[CollectionReport]:
+    """Collect every topic.
+
+    Topics with the same query share one round of requests to the sources. A topic that
+    cannot be stored is reported and does not stop the others.
+    """
+    fetched_by_query: dict[str, FetchedTopic] = {}
+    reports: list[CollectionReport] = []
+    for topic in topics:
+        key = " ".join(topic.query.casefold().split())
+        fetched = fetched_by_query.get(key)
+        if fetched is None:
+            fetched = await fetch_topic(sources, topic, limit=limit)
+            fetched_by_query[key] = fetched
+        try:
+            reports.append(store(topic, fetched))
+        except DomainError as exc:
+            logger.error("collection: topic %r could not be stored: %s", topic.name, exc)
+            reports.append(CollectionReport(topic.name, fetched.reports, error=str(exc)))
+    return reports
+
+
+def run_failed(reports: Sequence[CollectionReport]) -> bool:
+    """True when a topic could not be stored, or every source failed for every topic."""
+    if any(report.error for report in reports):
+        return True
+    return bool(reports) and all(
+        bool(report.sources) and len(report.failed_sources) == len(report.sources)
+        for report in reports
+    )

@@ -6,12 +6,16 @@ from sqlalchemy.orm import Session
 
 from scitracker.domain.status import ReadingStatus
 from scitracker.services.ports import AuthorCount, MonthlyCount, ReadingCounts
+from scitracker.services.report import Overview, TopicTotal
 from scitracker.storage.models import (
     AuthorRow,
+    Base,
     PublicationAuthorRow,
     PublicationRow,
     PublicationTopicRow,
     ReadingItemRow,
+    TopicRow,
+    UserRow,
 )
 
 
@@ -86,4 +90,27 @@ class SqlStatsRepository:
 
     def _count(self, *conditions: ColumnElement[bool]) -> int:
         stmt = select(func.count()).select_from(ReadingItemRow).where(*conditions)
+        return self._session.scalar(stmt) or 0
+
+    def overview(self) -> Overview:
+        topics = self._session.execute(
+            select(TopicRow.name, func.count(PublicationTopicRow.publication_id))
+            .select_from(TopicRow)
+            .outerjoin(PublicationTopicRow, PublicationTopicRow.topic_id == TopicRow.id)
+            .where(TopicRow.owner_id.is_(None))
+            .group_by(TopicRow.id, TopicRow.name)
+            .order_by(TopicRow.id)
+        )
+        return Overview(
+            publications=self._total(PublicationRow),
+            without_doi=self._total(PublicationRow, PublicationRow.doi.is_(None)),
+            authors=self._total(AuthorRow),
+            users=self._total(UserRow),
+            reading_items=self._total(ReadingItemRow),
+            private_topics=self._total(TopicRow, TopicRow.owner_id.is_not(None)),
+            topics=[TopicTotal(name, number) for name, number in topics],
+        )
+
+    def _total(self, model: type[Base], *conditions: ColumnElement[bool]) -> int:
+        stmt = select(func.count()).select_from(model).where(*conditions)
         return self._session.scalar(stmt) or 0

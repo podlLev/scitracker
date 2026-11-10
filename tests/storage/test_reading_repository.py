@@ -125,3 +125,19 @@ def test_database_refuses_an_inconsistent_status_row(session: Session) -> None:
         session.flush()
     session.rollback()
     assert session.scalar(select(func.count()).select_from(StatusChangeRow)) == 0
+
+
+def test_list_with_publications_joins_authors_and_filters_by_status(session: Session) -> None:
+    repo = SqlReadingListRepository(session)
+    alice, bob = make_user(session, "a@example.com"), make_user(session, "b@example.com")
+    first_pub, second_pub = make_pub(session, 1), make_pub(session, 2)
+    first, _ = repo.add_if_absent(alice, first_pub, T0)
+    repo.add_if_absent(alice, second_pub, T0)
+    repo.add_if_absent(bob, first_pub, T0)
+    assert first.id is not None
+    change_status(repo, alice, first.id, S.READING, T1)
+    rows = repo.list_with_publications(alice, status=None)
+    assert [pub.id for _, pub in rows] == [first_pub, second_pub]
+    only_reading = repo.list_with_publications(alice, status=S.READING)
+    assert [item.id for item, _ in only_reading] == [first.id]
+    assert repo.list_with_publications(bob, status=S.DONE) == []

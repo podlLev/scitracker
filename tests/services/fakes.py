@@ -171,11 +171,24 @@ class StubPublicationReader:
 
 
 class InMemoryReadingListRepository:
-    def __init__(self) -> None:
+    def __init__(self, publications: dict[int, Publication] | None = None) -> None:
+        self.publications = publications or {}
         self.items: dict[int, ReadingItem] = {}
         self.changes: dict[int, list[StatusChange]] = {}
         self.notes: dict[int, list[Note]] = {}
         self.locked: list[int] = []
+
+    def list_with_publications(
+        self, user_id: int, *, status: ReadingStatus | None
+    ) -> list[tuple[ReadingItem, Publication]]:
+        rows = sorted(self.items.values(), key=lambda item: item.id or 0)
+        return [
+            (replace(item), self.publications[item.publication_id])
+            for item in rows
+            if item.user_id == user_id
+            and (status is None or item.status is status)
+            and item.publication_id in self.publications
+        ]
 
     def add_if_absent(
         self, user_id: int, publication_id: int, at: datetime
