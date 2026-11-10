@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
 
 from scitracker.domain.errors import DuplicateRecordError
 from scitracker.domain.publication import Publication
@@ -8,7 +9,13 @@ from scitracker.domain.status import ReadingStatus
 from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
 from scitracker.services.errors import SourceError
-from scitracker.services.ports import SearchCriteria, SourceResult
+from scitracker.services.ports import (
+    AuthorCount,
+    MonthlyCount,
+    ReadingCounts,
+    SearchCriteria,
+    SourceResult,
+)
 
 
 class InMemoryPublicationRepository:
@@ -218,3 +225,34 @@ class InMemoryReadingListRepository:
 
     def list_notes(self, item_id: int) -> list[Note]:
         return list(self.notes.get(item_id, []))
+
+
+class StubStatsRepository:
+    def __init__(
+        self,
+        monthly: list[MonthlyCount] | None = None,
+        authors: list[AuthorCount] | None = None,
+        reading: ReadingCounts | None = None,
+    ) -> None:
+        self.monthly = monthly or []
+        self.authors = authors or []
+        self.reading = reading or ReadingCounts(0, 0, dict.fromkeys(ReadingStatus, 0))
+        self.last_monthly: tuple[list[int], date, date] | None = None
+        self.last_authors: tuple[int, date | None, date | None, int] | None = None
+        self.last_reading: tuple[int, datetime, datetime] | None = None
+
+    def monthly_counts(
+        self, topic_ids: Sequence[int], *, start: date, end: date
+    ) -> list[MonthlyCount]:
+        self.last_monthly = (list(topic_ids), start, end)
+        return self.monthly
+
+    def top_authors(
+        self, topic_id: int, *, start: date | None, end: date | None, limit: int
+    ) -> list[AuthorCount]:
+        self.last_authors = (topic_id, start, end, limit)
+        return self.authors[:limit]
+
+    def reading_counts(self, user_id: int, *, start: datetime, end: datetime) -> ReadingCounts:
+        self.last_reading = (user_id, start, end)
+        return self.reading

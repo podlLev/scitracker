@@ -41,3 +41,16 @@ def delete_topic(topics: TopicRepository, actor: User, topic_id: int) -> None:
     elif topic.owner_id != actor.id:  # someone else's private topic: do not reveal it exists
         raise RecordNotFoundError(f"topic {topic_id} does not exist")
     topics.delete(topic_id)
+
+
+def visible_topics(topics: TopicRepository, actor: User) -> list[Topic]:
+    """Public topics plus the user's own private ones."""
+    return [*topics.list_public(), *topics.list_owned(_user_id(actor))]
+
+
+def find_visible_topic(topics: TopicRepository, actor: User, topic_id: int) -> Topic:
+    """Someone else's private topic looks exactly like a missing one."""
+    for topic in visible_topics(topics, actor):
+        if topic.id == topic_id:
+            return topic
+    raise RecordNotFoundError(f"topic {topic_id} does not exist")

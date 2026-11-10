@@ -18,7 +18,8 @@
 - [x] REST API
 - [x] Автентифікація, ролі, теми користувачів
 - [x] Читацький список: статуси, історія, нотатки
-- [ ] CLI, експорт BibTeX, статистика
+- [x] Аналітика й стрічка
+- [ ] CLI, експорт BibTeX, збір за розкладом
 - [ ] Docker і розгортання
 
 ## Можливості (план)
@@ -172,6 +173,15 @@ uv run --env-file .env python -m scitracker.create_admin
 - `GET /api/v1/reading-list?status=&cursor=&limit=`: мій список
 - `GET /api/v1/reading-list/{id}/history`: історія змін статусу
 - `POST` і `GET /api/v1/reading-list/{id}/notes`: приватні нотатки
+
+### Стрічка й аналітика
+
+Усі запити потребують токена.
+
+- `GET /api/v1/feed?topic=&cursor=&limit=`: нові публікації в моїх і публічних темах
+- `GET /api/v1/stats/by-topic?from=&to=&topic=`: публікації за темою по місяцях (за замовчуванням останні 12 місяців)
+- `GET /api/v1/stats/top-authors?topic=&from=&to=&limit=`: найпродуктивніші автори теми
+- `GET /api/v1/stats/reading?from=&to=`: моя статистика читання (за замовчуванням 30 днів)
 
 ## Процес роботи
 

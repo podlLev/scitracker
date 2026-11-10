@@ -166,6 +166,14 @@ class SqlPublicationRepository:
                     )
                 )
             )
+        if criteria.topic_ids is not None:
+            stmt = stmt.where(
+                PublicationRow.id.in_(
+                    select(PublicationTopicRow.publication_id).where(
+                        PublicationTopicRow.topic_id.in_(criteria.topic_ids)
+                    )
+                )
+            )
         if criteria.published_from is not None:
             stmt = stmt.where(PublicationRow.published_on >= criteria.published_from)
         return [_publication_to_domain(row) for row in self._session.scalars(stmt)]
