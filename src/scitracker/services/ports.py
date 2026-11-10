@@ -149,6 +149,12 @@ class ReadingListRepository(Protocol):
 
     def list_notes(self, item_id: int) -> list[Note]: ...
 
+    def list_with_publications(
+        self, user_id: int, *, status: ReadingStatus | None
+    ) -> list[tuple[ReadingItem, Publication]]:
+        """The whole list, oldest first, with its publications (for export)."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class MonthlyCount:
