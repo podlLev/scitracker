@@ -19,7 +19,7 @@
 - [x] Автентифікація, ролі, теми користувачів
 - [x] Читацький список: статуси, історія, нотатки
 - [x] Аналітика й стрічка
-- [ ] CLI, експорт BibTeX, збір за розкладом
+- [x] CLI, експорт BibTeX, збір за розкладом
 - [ ] Docker і розгортання
 
 ## Можливості (план)
@@ -59,7 +59,8 @@ src/scitracker/
 ├── sources/    # адаптери arXiv та Crossref, HTTP-шар із retry
 ├── storage/    # моделі БД, репозиторії, міграції, seed
 ├── api/        # маршрути FastAPI, схеми, помилки
-└── security/   # паролі (argon2id), JWT
+├── security/   # паролі (argon2id), JWT
+└── cli.py, jobs.py, scheduler.py  # командний рядок і розклад
 ```
 
 Межі шарів перевіряються автоматично командою `lint-imports` (налаштування в `pyproject.toml`).
@@ -89,7 +90,7 @@ uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 copy .env.example .env
 docker compose up -d db
 uv run --env-file .env alembic upgrade head
-uv run --env-file .env python -m scitracker.storage.seed
+python -m scitracker.storage.seed
 ```
 
 База доступна на `127.0.0.1:5433` (порт 5433 обрано, щоб не конфліктувати з локальним PostgreSQL на 5432). Тестова база `scitracker_test` створюється автоматично під час першого запуску контейнера.
@@ -141,7 +142,7 @@ uv run pytest -m live -s --no-cov
 ### Збір публікацій
 
 ```powershell
-uv run --env-file .env python -m scitracker.collect
+python -m scitracker.collect
 ```
 
 Для кожної теми запитує arXiv і Crossref паралельно, об'єднує дублікати за DOI та arXiv ID й виводить підсумок (створено, об'єднано, відхилено, збої джерел). Потрібна `CROSSREF_MAILTO` у `.env`.
@@ -159,7 +160,7 @@ uv run --env-file .env uvicorn scitracker.main:build_app --factory --reload
 ### Адміністратор і автентифікація
 
 ```powershell
-uv run --env-file .env python -m scitracker.create_admin
+python -m scitracker.create_admin
 ```
 
 Реєстрація: `POST /api/v1/auth/register`, вхід: `POST /api/v1/auth/login` повертає токен (30 хв). У Swagger натисніть **Authorize** і вставте токен. Гість лише шукає публікації; користувач керує приватними темами (до 20); адміністратор створює й видаляє публічні.
@@ -182,6 +183,21 @@ uv run --env-file .env python -m scitracker.create_admin
 - `GET /api/v1/stats/by-topic?from=&to=&topic=`: публікації за темою по місяцях (за замовчуванням останні 12 місяців)
 - `GET /api/v1/stats/top-authors?topic=&from=&to=&limit=`: найпродуктивніші автори теми
 - `GET /api/v1/stats/reading?from=&to=`: моя статистика читання (за замовчуванням 30 днів)
+
+### Командний рядок
+
+Після `uv sync` доступна команда `scitracker` (також `python -m scitracker`).
+
+```powershell
+uv run --env-file .env scitracker seed                  # synthetic data into an empty database
+uv run --env-file .env scitracker collect               # arXiv + Crossref for all topics, once
+uv run --env-file .env scitracker schedule --interval-minutes 360
+uv run --env-file .env scitracker create-admin --email admin@example.com
+uv run --env-file .env scitracker export-bibtex --email me@example.com --output my-list.bib
+uv run --env-file .env scitracker report                # totals of the database
+```
+
+Для `create-admin` пароль запитується в терміналі; у скриптах його можна передати змінною `SCITRACKER_ADMIN_PASSWORD`. `export-bibtex` приймає `--status to_read|reading|done`. У PowerShell 5.1 використовуйте `--output`, бо перенаправлення `>` пише UTF-16.
 
 ## Процес роботи
 
