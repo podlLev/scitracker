@@ -18,6 +18,9 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
 ]
 
+[project.scripts]
+scitracker = "scitracker.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -79,9 +82,9 @@ source = ["scitracker"]
 omit = [
     "src/scitracker/storage/migrations/*",
     "src/scitracker/services/ports.py",
-    "src/scitracker/collect.py",
     "src/scitracker/main.py",
-    "src/scitracker/create_admin.py",
+    "src/scitracker/jobs.py",
+    "src/scitracker/__main__.py",
 ]
 
 [tool.coverage.report]
@@ -125,6 +128,15 @@ type = "independence"
 modules = [
     "scitracker.sources", "scitracker.storage", "scitracker.api", "scitracker.security",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Composition roots are not imported by inner layers"
+type = "forbidden"
+source_modules = [
+    "scitracker.domain", "scitracker.services", "scitracker.sources",
+    "scitracker.storage", "scitracker.security", "scitracker.api",
+]
+forbidden_modules = ["scitracker.cli", "scitracker.jobs", "scitracker.main"]
 
 [dependency-groups]
 dev = [
