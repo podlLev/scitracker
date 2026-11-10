@@ -49,11 +49,12 @@ ignore = ["PLR2004"]
 "tests/**" = ["S101", "S105", "S106", "PLR0913", "PLR2004"]
 "src/scitracker/storage/seed.py" = ["S311"]
 "src/scitracker/api/**" = ["TC001", "TC002", "TC003"]
+"tools/**" = ["S101"]
 
 # ---------- mypy ----------
 [tool.mypy]
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "tools"]
 exclude = ['^src/scitracker/storage/migrations/']
 warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
@@ -101,7 +102,7 @@ type = "forbidden"
 source_modules = ["scitracker.domain"]
 forbidden_modules = [
     "scitracker.services", "scitracker.sources", "scitracker.storage",
-    "scitracker.api", "scitracker.security",
+    "scitracker.api", "scitracker.security", "scitracker.observability",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
 ]
@@ -111,9 +112,21 @@ name = "Services depend only on domain"
 type = "forbidden"
 source_modules = ["scitracker.services"]
 forbidden_modules = [
-    "scitracker.sources", "scitracker.storage", "scitracker.api", "scitracker.security",
+    "scitracker.sources", "scitracker.storage", "scitracker.api",
+    "scitracker.security", "scitracker.observability",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
+]
+
+[[tool.importlinter.contracts]]
+name = "Observability is a leaf"
+type = "forbidden"
+source_modules = ["scitracker.observability"]
+forbidden_modules = [
+    "scitracker.domain", "scitracker.services", "scitracker.sources",
+    "scitracker.storage", "scitracker.security", "scitracker.api",
+    "scitracker.cli", "scitracker.jobs", "scitracker.main",
+    "fastapi", "starlette", "sqlalchemy",
 ]
 
 [[tool.importlinter.contracts]]
