@@ -8,7 +8,7 @@ from scitracker.storage.models import Base
 
 config = context.config
 connect_args={"options": "-c timezone=UTC"}
-if config.config_file_name is not None:
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata

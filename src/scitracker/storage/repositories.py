@@ -191,20 +191,27 @@ class SqlPublicationRepository:
         return self._session.scalar(select(func.count()).select_from(PublicationRow)) or 0
 
     def _attach_authors(self, row: PublicationRow, authors: list[Author]) -> None:
+        by_name = self._get_or_create_authors([author.name for author in authors])
         seen: set[int] = set()
         for author in authors:
-            author_row = self._get_or_create_author(author.name)
+            author_row = by_name[author.name]
             if author_row.id in seen:
                 continue
             seen.add(author_row.id)
             row.author_links.append(PublicationAuthorRow(author=author_row, position=len(seen) - 1))
 
-    def _get_or_create_author(self, name: str) -> AuthorRow:
-        # ON CONFLICT keeps this safe when two processes insert the same author.
+    def _get_or_create_authors(self, names: list[str]) -> dict[str, AuthorRow]:
+        """Two statements for any number of authors (was two per author)."""
+        unique = sorted(set(names))
+        if not unique:
+            return {}
         self._session.execute(
-            insert(AuthorRow).values(name=name).on_conflict_do_nothing(index_elements=["name"])
+            insert(AuthorRow)
+            .values([{"name": name} for name in unique])
+            .on_conflict_do_nothing(index_elements=["name"])
         )
-        return self._session.scalars(select(AuthorRow).where(AuthorRow.name == name)).one()
+        rows = self._session.scalars(select(AuthorRow).where(AuthorRow.name.in_(unique)))
+        return {row.name: row for row in rows}
 
 
 class SqlUserRepository:
