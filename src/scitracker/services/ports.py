@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Protocol
@@ -85,6 +86,7 @@ class SearchCriteria:
     author: str | None = None
     topic_id: int | None = None
     published_from: date | None = None
+    topic_ids: tuple[int, ...] | None = None
 
 
 class PublicationReader(Protocol):
@@ -148,6 +150,45 @@ class ReadingListRepository(Protocol):
     def list_notes(self, item_id: int) -> list[Note]: ...
 
 
+@dataclass(frozen=True, slots=True)
+class MonthlyCount:
+    topic_id: int
+    year: int
+    month: int
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorCount:
+    name: str
+    publications: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReadingCounts:
+    added: int
+    finished: int
+    by_status: dict[ReadingStatus, int]  # a snapshot "now", not limited to the period
+
+
+class StatsRepository(Protocol):
+    def monthly_counts(
+        self, topic_ids: Sequence[int], *, start: date, end: date
+    ) -> list[MonthlyCount]:
+        """Publications per topic and month by publication date; months without data are absent."""
+        ...
+
+    def top_authors(
+        self, topic_id: int, *, start: date | None, end: date | None, limit: int
+    ) -> list[AuthorCount]:
+        """Most productive first; ties are broken by name."""
+        ...
+
+    def reading_counts(self, user_id: int, *, start: datetime, end: datetime) -> ReadingCounts:
+        """Items added and finished within [start, end); `by_status` covers the whole list."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """One request: repositories over one session; the caller decides when to commit."""
 
@@ -162,5 +203,8 @@ class UnitOfWork(Protocol):
 
     @property
     def reading(self) -> ReadingListRepository: ...
+
+    @property
+    def stats(self) -> StatsRepository: ...
 
     def commit(self) -> None: ...
