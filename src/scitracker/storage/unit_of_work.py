@@ -6,10 +6,12 @@ from scitracker.storage.repositories import (
     SqlTopicRepository,
     SqlUserRepository,
 )
+from scitracker.storage.stats import SqlStatsRepository
 
 
 class SqlUnitOfWork:
     def __init__(self, session: Session) -> None:
+        self._stats = SqlStatsRepository(session)
         self._session = session
         self._publications = SqlPublicationRepository(session)
         self._topics = SqlTopicRepository(session)
@@ -31,6 +33,10 @@ class SqlUnitOfWork:
     @property
     def users(self) -> SqlUserRepository:
         return self._users
+
+    @property
+    def stats(self) -> SqlStatsRepository:
+        return self._stats
 
     def commit(self) -> None:  # pragma: no cover - tests use a flush-only subclass
         self._session.commit()
