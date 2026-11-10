@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from scitracker.domain.publication import Publication
 from scitracker.domain.topic import Topic
 from scitracker.services.collection import FetchedTopic, fetch_topic, store_topic
+from scitracker.services.ports import SourceResult
 from tests.services.fakes import InMemoryPublicationRepository, StubSource, unavailable
 
 TOPIC = Topic(name="GNN", query="graph neural networks", id=1)
@@ -73,3 +75,17 @@ def test_conflicting_record_is_counted_and_not_linked() -> None:
     clash = Publication(title="C", authors=[], doi="10.1000/x", arxiv_id="2101.00001")
     report = store_topic(repo, TOPIC, FetchedTopic([], [[clash]]))
     assert (report.conflicts, report.new_links) == (1, 0)
+
+
+async def test_sources_are_queried_concurrently() -> None:
+    barrier = asyncio.Barrier(2)
+
+    class MeetingSource(StubSource):
+        async def search(self, query: str, *, limit: int = 50) -> SourceResult:
+            await barrier.wait()  # returns only when BOTH sources are waiting at the same time
+            return await super().search(query, limit=limit)
+
+    sources = [MeetingSource("crossref"), MeetingSource("arxiv")]
+    async with asyncio.timeout(2):  # one at a time would wait here forever
+        fetched = await fetch_topic(sources, TOPIC)
+    assert [report.source for report in fetched.reports] == ["crossref", "arxiv"]

@@ -1,0 +1,22 @@
+records: 1000, authors per record: 4
+total: 16.03 s (16.0 ms per record)
+SQL statements: 13000 (13.0 per record)
+
+         6034565 function calls (5954530 primitive calls) in 16.016 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1362 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     1000    0.023    0.000   16.031    0.016 ingest.py:29(ingest_publication)
+     1000    0.013    0.000   14.641    0.015 repositories.py:73(add)
+    13000    0.023    0.000   12.027    0.001 base.py:1450(execute)
+    13000    0.016    0.000   12.004    0.001 elements.py:525(_execute_on_connection)
+    13000    0.108    0.000   11.988    0.001 base.py:1664(_execute_clauseelement)
+    13003    0.052    0.000   11.090    0.001 base.py:1813(_execute_context)
+    13003    0.135    0.000   10.616    0.001 base.py:1872(_exec_single_context)
+     1000    0.028    0.000    9.940    0.010 repositories.py:193(_attach_authors)
+    15008    0.025    0.000    9.736    0.001 connection.py:479(wait)
+    15008    0.074    0.000    9.711    0.001 waiting.py:329(wait_select)
+     4000    0.134    0.000    9.665    0.002 repositories.py:202(_get_or_create_author)
+     9000    0.078    0.000    9.489    0.001 session.py:2283(_execute_internal)

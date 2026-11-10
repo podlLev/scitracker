@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from scitracker import __version__
 from scitracker.api import auth, feed, health, me, publications, reading_list, stats, topics
 from scitracker.api.deps import Ping, Scope
+from scitracker.api.middleware import RequestContextMiddleware
 from scitracker.api.problems import register_problem_handlers
 from scitracker.services.ports import PasswordHasher, TokenService
 
@@ -35,6 +36,7 @@ def create_app(
     app.state.clock = clock
     register_problem_handlers(app)
     app.include_router(health.router)
+    app.add_middleware(RequestContextMiddleware)
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(auth.router)
     api_v1.include_router(me.router)

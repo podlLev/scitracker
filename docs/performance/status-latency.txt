@@ -1,0 +1,5 @@
+operation: change_status (row lock, update, history, commit), 300 calls
+median: 5.59 ms
+p95:    6.91 ms
+max:    11.73 ms
+rate:   175 calls/s (one at a time)

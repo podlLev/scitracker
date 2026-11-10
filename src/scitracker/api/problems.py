@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from scitracker.api.middleware import REQUEST_ID_HEADER
 from scitracker.domain.errors import (
     AuthenticationError,
     DomainError,
@@ -151,11 +152,19 @@ def register_problem_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unexpected(request: Request, exc: Exception) -> JSONResponse:
-        logger.error("unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
+        request_id: str | None = getattr(request.state, "request_id", None)
+        logger.error(
+            "unhandled error on %s %s",
+            request.method,
+            request.url.path,
+            exc_info=exc,
+            extra={"request_id": request_id},  # the context variable is already reset here
+        )
         return problem_response(
             request,
             500,
             "internal-error",
             "Internal Server Error",
             detail="Unexpected error. Please try again later.",
+            headers={REQUEST_ID_HEADER: request_id} if request_id else None,
         )
