@@ -240,6 +240,8 @@ uv run --env-file .env python tools/benchmark.py status --output docs/performanc
 
 ### Docker
 
+Образи: ghcr.io/podllev/scitracker та podllev/scitracker (Docker Hub)
+
 ```powershell
 copy .env.example .env
 docker compose up -d --build   # база, міграції, API (127.0.0.1:8000), збір за розкладом
