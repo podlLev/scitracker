@@ -74,3 +74,43 @@ jobs:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JWT_SECRET: ci-smoke-secret-0123456789-0123456789-0123456789
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image and start the whole stack
+        run: docker compose up -d --build
+
+      - name: Wait for the API
+        run: |
+          for _ in $(seq 1 45); do
+            curl -fsS http://127.0.0.1:8000/healthz && exit 0
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs --no-color
+          exit 1
+
+      - name: The application works inside the container
+        run: |
+          docker compose run --rm api scitracker seed --publications 40
+          curl -fsS "http://127.0.0.1:8000/api/v1/publications?limit=1" | grep -q '"items"'
+          curl -sI http://127.0.0.1:8000/healthz | grep -qi '^x-request-id:'
+          test "$(docker compose exec -T api id -u)" != "0"  # not running as root
+
+      - name: Backup and verified restore
+        run: |
+          bash scripts/backup.sh
+          bash scripts/restore-check.sh "$(ls -1t backups/*.dump | head -n 1)"
+
+      - name: Logs
+        if: always()
+        run: docker compose logs --no-color
+
+      - name: Stop
+        if: always()
+        run: docker compose down -v

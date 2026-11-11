@@ -1,0 +1,30 @@
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong POSTGRES_PASSWORD}
+  migrate:
+    image: ${SCITRACKER_IMAGE:?set SCITRACKER_IMAGE (see docs/operations/deployment.md)}
+  api:
+    image: ${SCITRACKER_IMAGE:?set SCITRACKER_IMAGE}
+  scheduler:
+    image: ${SCITRACKER_IMAGE:?set SCITRACKER_IMAGE}
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN (a name that points to this server)}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

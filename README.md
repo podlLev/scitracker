@@ -21,7 +21,7 @@
 - [x] Аналітика й стрічка
 - [x] CLI, експорт BibTeX, збір за розкладом
 - [x] Спостережуваність: структуровані журнали, `X-Request-ID`, профілювання
-- [ ] Docker і розгортання
+- [x] Docker і розгортання
 
 ## Можливості (план)
 
@@ -46,6 +46,7 @@
 | CI                     | GitHub Actions                                                                                              |
 | Контейнеризація        | Docker, Docker Compose                                                                                      |
 | Журнали                | стандартний `logging`, власний JSON-форматер [ADR-009](docs/adr/0009-structured-logging-and-request-id.md)) |
+| Контейнеризація        | Docker (multi-stage), Docker Compose, Caddy (HTTPS), образи в GHCR                                          |
 
 Обґрунтування вибору інструментів і розглянуті альтернативи: [ADR-001](docs/adr/0001-technology-stack.md).
 Не всі компоненти вже підключено: клієнти, API та автентифікація з'являться пізніше.
@@ -56,16 +57,20 @@
 
 ```
 src/scitracker/
-├── domain/         # моделі та правила предметної області
-├── services/       # сценарії використання, порти, помилки
-├── sources/        # адаптери arXiv та Crossref, HTTP-шар із retry
-├── storage/        # моделі БД, репозиторії, міграції, seed
-├── security/       # паролі (argon2id), JWT
-├── observability/  # журнали (JSON), correlation ID, редакція секретів
-├── api/            # маршрути FastAPI, помилки, middleware
+├── domain/                         # моделі та правила предметної області
+├── services/                       # сценарії використання, порти, помилки
+├── sources/                        # адаптери arXiv та Crossref, HTTP-шар із retry
+├── storage/                        # моделі БД, репозиторії, міграції, seed
+├── security/                       # паролі (argon2id), JWT
+├── observability/                  # журнали (JSON), correlation ID, редакція секретів
+├── api/                            # маршрути FastAPI, помилки, middleware
 ├── cli.py, jobs.py, scheduler.py   # командний рядок і розклад
-└── main.py         # composition root API
-tools/              # benchmark.py (вимірювання)
+└── main.py                         # composition root API
+tools/                              # benchmark.py (вимірювання)
+Dockerfile, docker-compose*.yml     # образ і стек
+deploy/                             # Caddyfile (HTTPS)
+scripts/                            # backup.sh, restore-check.sh
+docs/                               # ADR, діаграми, вимірювання, інструкції
 ```
 
 Межі шарів перевіряються автоматично командою `lint-imports` (налаштування в `pyproject.toml`).
@@ -104,14 +109,18 @@ python -m scitracker.storage.seed
 
 Змінні середовища задаються в `.env` (файл не потрапляє до репозиторію, шаблон: `.env.example`).
 
-| Змінна              | Призначення                                                                        |
-|---------------------|------------------------------------------------------------------------------------|
-| `DATABASE_URL`      | підключення до PostgreSQL                                                          |
-| `TEST_DATABASE_URL` | тестова база (`scitracker_test`)                                                   |
-| `CROSSREF_MAILTO`   | пошта для «polite pool» Crossref (стабільніші ліміти запитів)                      |
-| `JWT_SECRET`        | секрет підпису токенів, мінімум 32 символи                                         |
-| `LOG_LEVEL`         | рівень журналу: `DEBUG`, `INFO` (за замовчуванням), `WARNING`, `ERROR`, `CRITICAL` |
-| `LOG_FORMAT`        | `json` (за замовчуванням, для серверів) або `text` (зручніше локально)             |
+| Змінна                     | Призначення                                                                        |
+|----------------------------|------------------------------------------------------------------------------------|
+| `DATABASE_URL`             | підключення до PostgreSQL                                                          |
+| `TEST_DATABASE_URL`        | тестова база (`scitracker_test`)                                                   |
+| `CROSSREF_MAILTO`          | пошта для «polite pool» Crossref (стабільніші ліміти запитів)                      |
+| `JWT_SECRET`               | секрет підпису токенів, мінімум 32 символи                                         |
+| `LOG_LEVEL`                | рівень журналу: `DEBUG`, `INFO` (за замовчуванням), `WARNING`, `ERROR`, `CRITICAL` |
+| `LOG_FORMAT`               | `json` (за замовчуванням, для серверів) або `text` (зручніше локально)             |
+| `COLLECT_INTERVAL_MINUTES` | як часто сервіс `scheduler` збирає публікації (за замовчуванням 360)               |
+| `DOMAIN`                   | лише сервер: домен, для якого Caddy отримує сертифікат                             |
+| `POSTGRES_PASSWORD`        | пароль бази; на сервері обов'язковий і складний                                    |
+| `SCITRACKER_IMAGE`         | лише сервер: образ із GHCR, наприклад `ghcr.io/<owner>/scitracker:latest`          |
 
 Згенерувати секрет:
 
@@ -228,6 +237,16 @@ uv run --env-file .env uvicorn scitracker.main:build_app --factory --no-access-l
 uv run --env-file .env python tools/benchmark.py ingest --output docs/performance/ingest-after.txt
 uv run --env-file .env python tools/benchmark.py status --output docs/performance/status-latency.txt
 ```
+
+### Docker
+
+```powershell
+copy .env.example .env
+docker compose up -d --build   # база, міграції, API (127.0.0.1:8000), збір за розкладом
+docker compose run --rm api scitracker seed
+```
+
+Лише база для локальної розробки: `docker compose up -d db`. Розгортання на сервері з HTTPS: [docs/operations/deployment.md](docs/operations/deployment.md), резервні копії й відновлення: [docs/operations/backup.md](docs/operations/backup.md).
 
 ## Процес роботи
 

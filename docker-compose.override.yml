@@ -1,0 +1,9 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    volumes:
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro  # creates scitracker_test
+  api:
+    ports:
+      - "127.0.0.1:8000:8000"

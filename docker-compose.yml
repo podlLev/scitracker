@@ -1,20 +1,58 @@
+x-app: &app
+  image: ${SCITRACKER_IMAGE:-scitracker:local}
+  build: .
+  environment: &app-env
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-scitracker}:${POSTGRES_PASSWORD:-scitracker}@db:5432/${POSTGRES_DB:-scitracker}
+    JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    LOG_FORMAT: ${LOG_FORMAT:-json}
+
 services:
   db:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-scitracker}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scitracker}
       POSTGRES_DB: ${POSTGRES_DB:-scitracker}
-    ports:
-      - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    healthcheck:
+      disable: true
+      test: ["NONE"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *app
+    command: ["scitracker", "schedule", "--interval-minutes", "${COLLECT_INTERVAL_MINUTES:-360}"]
+    restart: unless-stopped
+    stop_grace_period: 120s  # SIGTERM lets the current collection finish
+    healthcheck:
+      disable: true
+      test: ["NONE"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
