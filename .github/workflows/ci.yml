@@ -80,7 +80,7 @@ jobs:
     env:
       JWT_SECRET: ci-smoke-secret-0123456789-0123456789-0123456789
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build the image and start the whole stack
         run: docker compose up -d --build
