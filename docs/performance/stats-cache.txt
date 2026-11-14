@@ -1,0 +1,7 @@
+cache benchmark, 200 requests per mode, warm-up 5
+
+GET /stats/by-topic
+  cache off: median 8.13 ms, p95 10.99 ms, max 15.21 ms, hits 0/200, first request 35.50 ms
+
+GET /stats/by-topic
+  cache on : median 7.79 ms, p95 10.12 ms, max 15.46 ms, hits 200/200, first request 35.63 ms
