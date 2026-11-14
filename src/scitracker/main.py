@@ -7,9 +7,11 @@ from sqlalchemy import text
 
 from scitracker.api.app import create_app
 from scitracker.api.caching import CacheSettings
+from scitracker.api.metrics import MetricsAccess, MetricsSettings
 from scitracker.api.ratelimit import RateLimits, RateLimitSettings
 from scitracker.cache.memory import InMemoryTtlCache, NullCache
 from scitracker.observability.logs import LogSettings, configure_logging
+from scitracker.observability.metrics import Metrics
 from scitracker.security.passwords import Argon2PasswordHasher
 from scitracker.security.rate_limiter import InMemorySlidingWindowLimiter
 from scitracker.security.tokens import JwtTokenService
@@ -17,6 +19,10 @@ from scitracker.services.cache import Cache
 from scitracker.services.ports import UnitOfWork
 from scitracker.storage.database import create_db_engine, create_session_factory
 from scitracker.storage.unit_of_work import SqlUnitOfWork
+
+
+def build_metrics(settings: MetricsSettings) -> MetricsAccess | None:
+    return MetricsAccess(Metrics(), settings.token) if settings.enabled else None
 
 
 def build_cache(settings: CacheSettings) -> Cache:

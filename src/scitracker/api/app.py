@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from scitracker import __version__
 from scitracker.api import auth, feed, health, me, publications, reading_list, stats, topics
 from scitracker.api.deps import Ping, Scope
+from scitracker.api.metrics import MetricsAccess, MetricsMiddleware
 from scitracker.api.middleware import RequestContextMiddleware
 from scitracker.api.problems import register_problem_handlers
 from scitracker.api.ratelimit import RateLimits, rate_limit_exceeded_handler
@@ -27,6 +28,8 @@ def create_app(  # noqa: PLR0913 - composition root: every dependency is injecte
     clock: Callable[[], datetime] = _utc_now,
     rate_limits: RateLimits | None = None,
     cache: Cache | None = None,
+    metrics: MetricsAccess | None = None,
+    metrics_router=None,
 ) -> FastAPI:
     """Build the application. Everything infrastructural is injected by the caller."""
     app = FastAPI(
@@ -41,9 +44,13 @@ def create_app(  # noqa: PLR0913 - composition root: every dependency is injecte
     app.state.clock = clock
     app.state.rate_limits = rate_limits
     app.state.cache = cache
+    app.state.metrics = metrics
     register_problem_handlers(app)
     app.include_router(health.router)
     app.add_middleware(RequestContextMiddleware)
+    if metrics is not None:
+        app.add_middleware(MetricsMiddleware, metrics=metrics.metrics)
+        app.include_router(metrics_router)
     app.add_exception_handler(RateLimitExceededError, rate_limit_exceeded_handler)
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(auth.router)
