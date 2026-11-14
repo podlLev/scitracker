@@ -9,6 +9,7 @@ from scitracker.api.deps import Ping, Scope
 from scitracker.api.middleware import RequestContextMiddleware
 from scitracker.api.problems import register_problem_handlers
 from scitracker.api.ratelimit import RateLimits, rate_limit_exceeded_handler
+from scitracker.services.cache import Cache
 from scitracker.services.ports import PasswordHasher, TokenService
 from scitracker.services.ratelimit import RateLimitExceededError
 
@@ -25,6 +26,7 @@ def create_app(  # noqa: PLR0913 - composition root: every dependency is injecte
     tokens: TokenService,
     clock: Callable[[], datetime] = _utc_now,
     rate_limits: RateLimits | None = None,
+    cache: Cache | None = None,
 ) -> FastAPI:
     """Build the application. Everything infrastructural is injected by the caller."""
     app = FastAPI(
@@ -38,6 +40,7 @@ def create_app(  # noqa: PLR0913 - composition root: every dependency is injecte
     app.state.tokens = tokens
     app.state.clock = clock
     app.state.rate_limits = rate_limits
+    app.state.cache = cache
     register_problem_handlers(app)
     app.include_router(health.router)
     app.add_middleware(RequestContextMiddleware)
