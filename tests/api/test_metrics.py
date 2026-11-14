@@ -106,7 +106,7 @@ def test_metrics_endpoint_is_hidden_from_openapi(client: TestClient) -> None:
 
 def test_disabled_metrics_are_not_served() -> None:
     app = create_app(
-        scope=lambda: (_ for _ in ()).throw(RuntimeError("unused")),  # type: ignore[arg-type,return-value]
+        scope=lambda: (_ for _ in ()).throw(RuntimeError("unused")),
         ping=lambda: None,
         hasher=Argon2PasswordHasher(),
         tokens=JwtTokenService(TEST_SECRET),
@@ -116,7 +116,7 @@ def test_disabled_metrics_are_not_served() -> None:
 
 def test_create_app_counts_healthz() -> None:
     app = create_app(
-        scope=lambda: (_ for _ in ()).throw(RuntimeError("unused")),  # type: ignore[arg-type,return-value]
+        scope=lambda: (_ for _ in ()).throw(RuntimeError("unused")),
         ping=lambda: None,
         hasher=Argon2PasswordHasher(),
         tokens=JwtTokenService(TEST_SECRET),

@@ -7,6 +7,7 @@ from scitracker import __version__
 from scitracker.api import auth, feed, health, me, publications, reading_list, stats, topics
 from scitracker.api.deps import Ping, Scope
 from scitracker.api.metrics import MetricsAccess, MetricsMiddleware
+from scitracker.api.metrics import router as metrics_router
 from scitracker.api.middleware import RequestContextMiddleware
 from scitracker.api.problems import register_problem_handlers
 from scitracker.api.ratelimit import RateLimits, rate_limit_exceeded_handler
@@ -29,7 +30,6 @@ def create_app(  # noqa: PLR0913 - composition root: every dependency is injecte
     rate_limits: RateLimits | None = None,
     cache: Cache | None = None,
     metrics: MetricsAccess | None = None,
-    metrics_router=None,
 ) -> FastAPI:
     """Build the application. Everything infrastructural is injected by the caller."""
     app = FastAPI(
