@@ -32,6 +32,7 @@ from scitracker.api.app import create_app
 from scitracker.cache.memory import InMemoryTtlCache, NullCache
 from scitracker.domain.publication import Author, Publication
 from scitracker.domain.status import ReadingStatus
+from scitracker.domain.topic import Topic
 from scitracker.domain.user import User
 from scitracker.security.passwords import Argon2PasswordHasher
 from scitracker.security.tokens import JwtTokenService
@@ -43,6 +44,7 @@ from scitracker.storage.models import PublicationRow, UserRow
 from scitracker.storage.repositories import (
     SqlPublicationRepository,
     SqlReadingListRepository,
+    SqlTopicRepository,
     SqlUserRepository,
 )
 from scitracker.storage.unit_of_work import SqlUnitOfWork
@@ -186,6 +188,10 @@ def bench_cache(engine: Engine, iterations: int) -> str:
         )
         assert user.id is not None
         user_id = user.id
+        topic = SqlTopicRepository(session).add(
+            Topic(name=f"bench-{run}", query="bench", owner_id=user.id)
+        )
+        assert topic.id is not None
     headers = {"Authorization": f"Bearer {tokens.issue(user_id)}"}
     report = f"cache benchmark, {iterations} requests per mode, warm-up {WARMUP}\n\n"
     try:
