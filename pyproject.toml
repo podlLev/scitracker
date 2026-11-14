@@ -107,6 +107,7 @@ forbidden_modules = [
     "scitracker.cache",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
+    "prometheus_client",
 ]
 
 [[tool.importlinter.contracts]]
@@ -118,6 +119,7 @@ forbidden_modules = [
     "scitracker.security", "scitracker.observability", "scitracker.cache",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
+    "prometheus_client",
 ]
 
 [[tool.importlinter.contracts]]
