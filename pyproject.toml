@@ -103,6 +103,7 @@ source_modules = ["scitracker.domain"]
 forbidden_modules = [
     "scitracker.services", "scitracker.sources", "scitracker.storage",
     "scitracker.api", "scitracker.security", "scitracker.observability",
+    "scitracker.cache",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
 ]
@@ -113,7 +114,7 @@ type = "forbidden"
 source_modules = ["scitracker.services"]
 forbidden_modules = [
     "scitracker.sources", "scitracker.storage", "scitracker.api",
-    "scitracker.security", "scitracker.observability",
+    "scitracker.security", "scitracker.observability", "scitracker.cache",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
 ]
@@ -126,7 +127,18 @@ forbidden_modules = [
     "scitracker.domain", "scitracker.services", "scitracker.sources",
     "scitracker.storage", "scitracker.security", "scitracker.api",
     "scitracker.cli", "scitracker.jobs", "scitracker.main",
+    "scitracker.cache",
     "fastapi", "starlette", "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "Cache adapter uses only the standard library"
+type = "forbidden"
+source_modules = ["scitracker.cache"]
+forbidden_modules = [
+    "scitracker.domain", "scitracker.storage", "scitracker.sources",
+    "scitracker.api", "scitracker.security", "scitracker.observability",
+    "sqlalchemy", "psycopg", "httpx", "fastapi", "starlette", "pydantic",
 ]
 
 [[tool.importlinter.contracts]]
