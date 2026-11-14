@@ -1,12 +1,14 @@
 from typing import Annotated, Self
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Response
 from pydantic import BaseModel, Field
 
+from scitracker.api.caching import CacheDep, mark_cache
 from scitracker.api.deps import PROTECTED, CurrentUser, Repositories
 from scitracker.api.pagination import MAX_ID
 from scitracker.api.problems import ProblemDetails
 from scitracker.domain.topic import Topic
+from scitracker.services.cache import Cache, make_key
 from scitracker.services.topics import create_topic, delete_topic
 
 router = APIRouter(prefix="/topics", tags=["topics"])
@@ -31,9 +33,20 @@ class TopicIn(BaseModel):
     public: bool = Field(default=False, description="Public topics require an administrator")
 
 
+def _invalidate(cache: Cache) -> None:
+    """Topics changed: visible topics in listings and stats may differ now."""
+    cache.invalidate("topics")
+    cache.invalidate("stats")
+
+
 @router.get("", response_model=list[TopicOut], summary="List public topics")
-def list_topics(repositories: Repositories) -> list[TopicOut]:
-    return [TopicOut.from_domain(topic) for topic in repositories.topics.list_public()]
+def list_topics(response: Response, repositories: Repositories, cache: CacheDep) -> list[TopicOut]:
+    cached = cache.get_or_compute(
+        make_key("topics:public", user_id=None),
+        lambda: tuple(repositories.topics.list_public()),
+    )
+    mark_cache(response, cached)
+    return [TopicOut.from_domain(topic) for topic in cached.value]
 
 
 @router.post(
@@ -48,11 +61,14 @@ def list_topics(repositories: Repositories) -> list[TopicOut]:
         422: {"model": ProblemDetails},
     },
 )
-def post_topic(body: TopicIn, user: CurrentUser, repositories: Repositories) -> TopicOut:
+def post_topic(
+    body: TopicIn, user: CurrentUser, repositories: Repositories, cache: CacheDep
+) -> TopicOut:
     topic = create_topic(
         repositories.topics, user, name=body.name, query=body.query, public=body.public
     )
     repositories.commit()
+    _invalidate(cache)  # after the commit, otherwise a concurrent request caches the old state
     return TopicOut.from_domain(topic)
 
 
@@ -71,6 +87,8 @@ def remove_topic(
     topic_id: Annotated[int, Path(ge=1, le=MAX_ID)],
     user: CurrentUser,
     repositories: Repositories,
+    cache: CacheDep,
 ) -> None:
     delete_topic(repositories.topics, user, topic_id)
     repositories.commit()
+    _invalidate(cache)

@@ -1,15 +1,17 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel, Field
 
+from scitracker.api.caching import CacheDep, mark_cache
 from scitracker.api.deps import PROTECTED, CurrentUser, Now, Repositories
 from scitracker.api.pagination import MAX_ID
 from scitracker.api.problems import ProblemDetails
 from scitracker.domain.status import ReadingStatus
 from scitracker.domain.user import User
 from scitracker.services import stats as service
+from scitracker.services.cache import make_key
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -77,22 +79,38 @@ class ReadingStatsOut(BaseModel):
     responses=ERRORS,
 )
 def by_topic(  # noqa: PLR0913, PLR0917
+    response: Response,
     user: CurrentUser,
     repositories: Repositories,
     now: Now,
+    cache: CacheDep,
     published_from: FromDate = None,
     published_to: ToDate = None,
     topic: Annotated[int | None, Query(ge=1, le=MAX_ID, description="One topic only")] = None,
 ) -> DynamicsOut:
-    result = service.topic_dynamics(
-        repositories.topics,
-        repositories.stats,
-        user,
+    today = now.date()
+    key = make_key(
+        "stats:by-topic",
+        user_id=_uid(user),
         start=published_from,
         end=published_to,
-        today=now.date(),
-        topic_id=topic,
+        topic=topic,
+        today=today,  # the default period depends on today
     )
+    cached = cache.get_or_compute(
+        key,
+        lambda: service.topic_dynamics(
+            repositories.topics,
+            repositories.stats,
+            user,
+            start=published_from,
+            end=published_to,
+            today=today,
+            topic_id=topic,
+        ),
+    )
+    mark_cache(response, cached)
+    result = cached.value
     return DynamicsOut(
         start=result.start,
         end=result.end,
@@ -119,27 +137,41 @@ def by_topic(  # noqa: PLR0913, PLR0917
     responses=ERRORS,
 )
 def top_authors(  # noqa: PLR0913, PLR0917
+    response: Response,
     user: CurrentUser,
     repositories: Repositories,
+    cache: CacheDep,
     topic: Annotated[int, Query(ge=1, le=MAX_ID, description="Topic id")],
     published_from: FromDate = None,
     published_to: ToDate = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> TopAuthorsOut:
-    authors = service.top_authors(
-        repositories.topics,
-        repositories.stats,
-        user,
-        topic,
+    key = make_key(
+        "stats:top-authors",
+        user_id=_uid(user),
+        topic=topic,
         start=published_from,
         end=published_to,
         limit=limit,
     )
+    cached = cache.get_or_compute(
+        key,
+        lambda: service.top_authors(
+            repositories.topics,
+            repositories.stats,
+            user,
+            topic,
+            start=published_from,
+            end=published_to,
+            limit=limit,
+        ),
+    )
+    mark_cache(response, cached)
     return TopAuthorsOut(
         topic_id=topic,
         start=published_from,
         end=published_to,
-        authors=[AuthorCountOut(author=a.name, publications=a.publications) for a in authors],
+        authors=[AuthorCountOut(author=a.name, publications=a.publications) for a in cached.value],
     )
 
 
