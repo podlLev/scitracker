@@ -53,6 +53,7 @@ def build_app() -> FastAPI:
     rate_limits = build_rate_limits(RateLimitSettings.from_env(os.environ))
     cache = build_cache(CacheSettings.from_env(os.environ))
     session_factory = create_session_factory(create_db_engine(os.environ["DATABASE_URL"]))
+    metrics = build_metrics(MetricsSettings.from_env(os.environ))
 
     @contextmanager
     def scope() -> Iterator[UnitOfWork]:
@@ -70,4 +71,5 @@ def build_app() -> FastAPI:
         tokens=JwtTokenService(os.environ["JWT_SECRET"]),
         rate_limits=rate_limits,
         cache=cache,
+        metrics=metrics,
     )
