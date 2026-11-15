@@ -4,7 +4,7 @@
 
 Курсовий проєкт з дисципліни «Python-програмування» (ДУІТЗ, спеціальність 122 «Комп'ютерні науки»), тема 17.
 
-**Робоча версія:** _буде додано після розгортання_
+**Робоча версія:** https://api-production-3efbf683.up.railway.app (документація API: `/docs`)
 
 ## Статус
 
@@ -22,8 +22,11 @@
 - [x] CLI, експорт BibTeX, збір за розкладом
 - [x] Спостережуваність: структуровані журнали, `X-Request-ID`, профілювання
 - [x] Docker і розгортання
+- [x] Rate limiting входу й реєстрації
+- [x] Кешування відповідей
+- [x] Метрики Prometheus
 
-## Можливості (план)
+## Можливості
 
 - збір публікацій за запитами користувача з arXiv та Crossref;
 - дедуплікація публікацій, знайдених в обох джерелах;
@@ -31,25 +34,29 @@
 - читацький список зі статусами `до читання → читаю → прочитано` та нотатками;
 - експорт списку у BibTeX через CLI;
 - аналітика: динаміка публікацій за темою, найпродуктивніші автори, статистика читання.
+- обмеження частоти спроб входу й реєстрації (429 з `Retry-After`);
+- кеш відповідей статистики й публічних тем (заголовок `X-Cache`);
+- метрики Prometheus (`/metrics`): запити за маршрутом і статусом, тривалість, запити в роботі. Вимкнено за замовчуванням, захищено токеном.
 
 ## Стек
 
-| Компонент              | Інструмент                                                                                                  |
-|------------------------|-------------------------------------------------------------------------------------------------------------|
-| Мова                   | Python 3.12+                                                                                                |
-| Керування залежностями | uv                                                                                                          |
-| База даних             | PostgreSQL (див. [ADR-002](docs/adr/0002-database.md))                                                      |
-| ORM і міграції         | SQLAlchemy 2.0, Alembic                                                                                     |
-| HTTP-клієнт            | httpx, defusedxml (безпечний розбір XML)                                                                    |
-| API                    | FastAPI, Pydantic                                                                                           |
-| Якість коду            | ruff, mypy (strict), pytest, import-linter                                                                  |
-| CI                     | GitHub Actions                                                                                              |
-| Контейнеризація        | Docker, Docker Compose                                                                                      |
-| Журнали                | стандартний `logging`, власний JSON-форматер [ADR-009](docs/adr/0009-structured-logging-and-request-id.md)) |
-| Контейнеризація        | Docker (multi-stage), Docker Compose, Caddy (HTTPS), образи в GHCR                                          |
+| Компонент               | Інструмент                                                                                                               |
+|-------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| Мова                    | Python 3.12+                                                                                                             |
+| Керування залежностями  | uv                                                                                                                       |
+| База даних              | PostgreSQL (див. [ADR-002](docs/adr/0002-database.md))                                                                   |
+| ORM і міграції          | SQLAlchemy 2.0, Alembic                                                                                                  |
+| HTTP-клієнт             | httpx, defusedxml (безпечний розбір XML)                                                                                 |
+| API                     | FastAPI, Pydantic                                                                                                        |
+| Якість коду             | ruff, mypy (strict), pytest, import-linter                                                                               |
+| CI                      | GitHub Actions                                                                                                           |
+| Контейнеризація         | Docker, Docker Compose                                                                                                   |
+| Журнали                 | стандартний `logging`, власний JSON-форматер [ADR-009](docs/adr/0009-structured-logging-and-request-id.md))              |
+| Контейнеризація         | Docker (multi-stage), Docker Compose, Caddy (HTTPS), образи в GHCR                                                       |
+| Захист і продуктивність | rate limiting ([ADR-011](docs/adr/0011-rate-limiting.md)), кеш відповідей ([ADR-012](docs/adr/0012-response-caching.md)) |
+| Метрики                 | prometheus-client ([ADR-013](docs/adr/0013-prometheus-metrics.md))                                                       |
 
 Обґрунтування вибору інструментів і розглянуті альтернативи: [ADR-001](docs/adr/0001-technology-stack.md).
-Не всі компоненти вже підключено: клієнти, API та автентифікація з'являться пізніше.
 
 ## Архітектура
 
@@ -109,18 +116,30 @@ python -m scitracker.storage.seed
 
 Змінні середовища задаються в `.env` (файл не потрапляє до репозиторію, шаблон: `.env.example`).
 
-| Змінна                     | Призначення                                                                        |
-|----------------------------|------------------------------------------------------------------------------------|
-| `DATABASE_URL`             | підключення до PostgreSQL                                                          |
-| `TEST_DATABASE_URL`        | тестова база (`scitracker_test`)                                                   |
-| `CROSSREF_MAILTO`          | пошта для «polite pool» Crossref (стабільніші ліміти запитів)                      |
-| `JWT_SECRET`               | секрет підпису токенів, мінімум 32 символи                                         |
-| `LOG_LEVEL`                | рівень журналу: `DEBUG`, `INFO` (за замовчуванням), `WARNING`, `ERROR`, `CRITICAL` |
-| `LOG_FORMAT`               | `json` (за замовчуванням, для серверів) або `text` (зручніше локально)             |
-| `COLLECT_INTERVAL_MINUTES` | як часто сервіс `scheduler` збирає публікації (за замовчуванням 360)               |
-| `DOMAIN`                   | лише сервер: домен, для якого Caddy отримує сертифікат                             |
-| `POSTGRES_PASSWORD`        | пароль бази; на сервері обов'язковий і складний                                    |
-| `SCITRACKER_IMAGE`         | лише сервер: образ із GHCR, наприклад `ghcr.io/<owner>/scitracker:latest`          |
+| Змінна                               | Призначення                                                                        |
+|--------------------------------------|------------------------------------------------------------------------------------|
+| `DATABASE_URL`                       | підключення до PostgreSQL                                                          |
+| `TEST_DATABASE_URL`                  | тестова база (`scitracker_test`)                                                   |
+| `CROSSREF_MAILTO`                    | пошта для «polite pool» Crossref (стабільніші ліміти запитів)                      |
+| `JWT_SECRET`                         | секрет підпису токенів, мінімум 32 символи                                         |
+| `LOG_LEVEL`                          | рівень журналу: `DEBUG`, `INFO` (за замовчуванням), `WARNING`, `ERROR`, `CRITICAL` |
+| `LOG_FORMAT`                         | `json` (за замовчуванням, для серверів) або `text` (зручніше локально)             |
+| `COLLECT_INTERVAL_MINUTES`           | як часто сервіс `scheduler` збирає публікації (за замовчуванням 360)               |
+| `DOMAIN`                             | лише сервер: домен, для якого Caddy отримує сертифікат                             |
+| `POSTGRES_PASSWORD`                  | пароль бази; на сервері обов'язковий і складний                                    |
+| `SCITRACKER_IMAGE`                   | лише сервер: образ із GHCR, наприклад `ghcr.io/<owner>/scitracker:latest`          |
+| `RATE_LIMIT_ENABLED`                 | `true`: вимкнути можна значенням `false`                                           |
+| `RATE_LIMIT_LOGIN_PER_ACCOUNT`       | спроб входу на пару (IP, email) за вікно, за замовчуванням 5                       |
+| `RATE_LIMIT_LOGIN_PER_IP`            | спроб входу на IP за вікно, за замовчуванням 20                                    |
+| `RATE_LIMIT_LOGIN_WINDOW_SECONDS`    | вікно входу, за замовчуванням 60                                                   |
+| `RATE_LIMIT_REGISTER_PER_IP`         | реєстрацій на IP за вікно, за замовчуванням 5                                      |
+| `RATE_LIMIT_REGISTER_WINDOW_SECONDS` | вікно реєстрації, за замовчуванням 600                                             |
+| `RATE_LIMIT_TRUSTED_PROXY_HOPS`      | кількість довірених проксі перед API (Caddy, Railway: 1), типово 0                 |
+| `CACHE_ENABLED`                      | `true` за замовчуванням; `false` вимикає кеш відповідей                            |
+| `CACHE_TTL_SECONDS`                  | час життя запису кешу, за замовчуванням 60                                         |
+| `CACHE_MAX_ENTRIES`                  | максимум записів у кеші, за замовчуванням 1000                                     |
+| `METRICS_ENABLED`                    | `false` за замовчуванням; `true` вмикає `/metrics`                                 |
+| `METRICS_TOKEN`                      | Bearer-токен для `/metrics`, мінімум 16 символів, обов'язковий при ввімкненні      |
 
 Згенерувати секрет:
 
@@ -237,6 +256,16 @@ uv run --env-file .env uvicorn scitracker.main:build_app --factory --no-access-l
 uv run --env-file .env python tools/benchmark.py ingest --output docs/performance/ingest-after.txt
 uv run --env-file .env python tools/benchmark.py status --output docs/performance/status-latency.txt
 ```
+
+### Обмеження частоти й кеш
+
+`POST /api/v1/auth/login` і `/auth/register` обмежені за IP та парою (IP, email): перевищення дає `429` у форматі problem+json із заголовком `Retry-After`. За проксі потрібно задати `RATE_LIMIT_TRUSTED_PROXY_HOPS` ([ADR-011](docs/adr/0011-rate-limiting.md)).
+
+`GET /stats/by-topic`, `/stats/top-authors` і `/topics` кешуються в пам'яті (ключ містить користувача). Заголовок `X-Cache: HIT|MISS` показує результат. Свіжість після збору гарантує лише TTL ([ADR-012](docs/adr/0012-response-caching.md)).
+
+### Метрики
+
+`/metrics` вимкнено за замовчуванням. Увімкнення: `METRICS_ENABLED=true` і `METRICS_TOKEN`, доступ за заголовком `Authorization: Bearer <токен>` ([ADR-013](docs/adr/0013-prometheus-metrics.md)).
 
 ### Docker
 

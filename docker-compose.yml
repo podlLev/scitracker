@@ -7,6 +7,8 @@ x-app: &app
     CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
     LOG_FORMAT: ${LOG_FORMAT:-json}
+    METRICS_ENABLED: ${METRICS_ENABLED:-false}
+    METRICS_TOKEN: ${METRICS_TOKEN:-}
 
 services:
   db:

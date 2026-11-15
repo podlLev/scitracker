@@ -12,6 +12,7 @@ dependencies = [
     "defusedxml>=0.7.1",
     "fastapi>=0.162.0",
     "httpx>=0.28.1",
+    "prometheus-client>=0.26.0",
     "psycopg[binary]>=3.3.7",
     "pyjwt>=2.15.1",
     "sqlalchemy>=2.1.6",
@@ -106,6 +107,7 @@ forbidden_modules = [
     "scitracker.cache",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
+    "prometheus_client",
 ]
 
 [[tool.importlinter.contracts]]
@@ -117,6 +119,7 @@ forbidden_modules = [
     "scitracker.security", "scitracker.observability", "scitracker.cache",
     "sqlalchemy", "psycopg", "alembic", "httpx", "defusedxml",
     "fastapi", "starlette", "pydantic", "uvicorn", "argon2", "jwt",
+    "prometheus_client",
 ]
 
 [[tool.importlinter.contracts]]
