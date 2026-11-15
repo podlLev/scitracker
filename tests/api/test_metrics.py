@@ -155,3 +155,17 @@ def test_error_message_does_not_contain_token() -> None:
     with pytest.raises(ValueError, match="METRICS_TOKEN") as info:
         MetricsSettings.from_env({"METRICS_ENABLED": "1", "METRICS_TOKEN": "secret"})
     assert "secret" not in str(info.value)
+
+
+def test_create_app_uses_full_route_template() -> None:
+    app = create_app(
+        scope=lambda: (_ for _ in ()).throw(RuntimeError("unused")),
+        ping=lambda: None,
+        hasher=Argon2PasswordHasher(),
+        tokens=JwtTokenService(TEST_SECRET),
+        metrics=MetricsAccess(Metrics(), TOKEN),
+    )
+    with TestClient(app) as test_client:
+        test_client.get("/api/v1/auth/login")
+        body = test_client.get("/metrics", headers=AUTH).text
+    assert 'route="/api/v1/auth/login"' in body

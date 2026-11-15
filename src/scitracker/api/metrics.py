@@ -16,6 +16,7 @@ from scitracker.observability.metrics import Metrics
 MIN_TOKEN_LENGTH = 16
 UNMATCHED = "unmatched"
 _TRUE_VALUES = {"1", "true", "yes", "on"}
+API_PREFIX = "/api/v1"
 
 router = APIRouter()
 
@@ -67,8 +68,18 @@ class MetricsMiddleware:
         try:
             await self._app(scope, receive, send_wrapper)
         finally:
-            route = getattr(scope.get("route"), "path", None) or UNMATCHED
+            route = _route_label(scope)
             self._metrics.finished(scope["method"], route, status, time.perf_counter() - started)
+
+
+def _route_label(scope: Scope) -> str:
+    """Route template with the API prefix, so future API versions stay separate."""
+    template: str | None = getattr(scope.get("route"), "path", None)
+    if not template:
+        return UNMATCHED
+    if str(scope["path"]).startswith(API_PREFIX) and not template.startswith(API_PREFIX):
+        return f"{API_PREFIX}{template}"
+    return template
 
 
 def _authorized(header: str | None, token: str) -> bool:
